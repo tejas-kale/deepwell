@@ -7,6 +7,7 @@ struct LibraryView: View {
     @State private var selection: String?
     @State private var showMenu = false
     @State private var menu: MenuController?
+    @State private var showTags = false
 
     init(folder: URL) { _model = State(initialValue: LibraryModel(folder: folder)) }
 
@@ -41,7 +42,12 @@ struct LibraryView: View {
                             Text("Any status").tag(ItemStatus?.none)
                             ForEach(ItemStatus.allCases, id: \.self) { Text($0.rawValue).tag(ItemStatus?.some($0)) }
                         }
+                        Picker("Tag", selection: $model.tagFilter) {
+                            Text("All tags").tag(String?.none)
+                            ForEach(model.tagSummaries, id: \.name) { Text("\($0.name) (\($0.itemCount))").tag(String?.some($0.name)) }
+                        }
                         Divider()
+                        Button("Manage Tags…") { showTags = true }
                         Button("Rebuild Index") { model.rebuildIndex() }
                     } label: { Label("Filter", systemImage: "line.3.horizontal.decrease.circle") }
                 }
@@ -57,6 +63,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showMenu) {
             if let menu { MenuContainerView(controller: menu) { showMenu = false } }
         }
+        .sheet(isPresented: $showTags) { TagsView(model: model) }
         .safeAreaInset(edge: .bottom) {
             if let msg = model.errorMessage { Text(msg).font(.caption).foregroundStyle(.red).padding(4) }
         }
@@ -73,6 +80,15 @@ struct ItemRow: View {
                 Text(entry.item.title.isEmpty ? "Untitled" : entry.item.title)
                     .fontWeight(entry.item.status == .unread ? .semibold : .regular)
                     .lineLimit(2)
+            }
+            if !entry.item.tags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(entry.item.tags, id: \.self) { t in
+                        Text(entry.newTags.contains(t) ? "\(t) • new" : t)
+                            .font(.caption2).padding(.horizontal, 5)
+                            .background(entry.newTags.contains(t) ? Color.orange.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
+                    }
+                }
             }
             HStack(spacing: 6) {
                 Text(entry.item.type.rawValue)

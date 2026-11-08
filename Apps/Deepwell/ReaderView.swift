@@ -22,6 +22,8 @@ struct ReaderView: View {
                 VStack { ProgressView(); Text("Downloading from iCloud…").font(.caption).foregroundStyle(.secondary) }
             case .failed(let msg):
                 Text(msg).foregroundStyle(.red).padding()
+            case .ready(let doc) where doc.item.type == .youtube:
+                YouTubeTranscriptView(document: doc)
             case .ready(let doc):
                 ScrollProgressView(initialProgress: doc.item.progress) { p in progressChanged(p) } content: {
                     VStack(alignment: .leading, spacing: 12) {
