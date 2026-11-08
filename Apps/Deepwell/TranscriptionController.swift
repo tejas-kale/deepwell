@@ -2,6 +2,7 @@ import Foundation
 import DeepwellLibrary
 import DeepwellModel
 import DeepwellTranscription
+import DeepwellPodcasts
 
 /// Thin glue: builds the transcription queue for the app. Additive; the library UI (ticket 02) reads
 /// `queue.status(for: item.id)` and shows `TranscriptionStatusView`. YouTube audio is a stub (see docs/transcription.md);
@@ -12,7 +13,7 @@ final class TranscriptionController {
     private var timer: Timer?
 
     init(folderStore: LibraryFolderStore, resolvers: [ItemType: AudioURLResolver] = [:]) {
-        var all: [ItemType: AudioURLResolver] = [.youtube: YouTubeAudioResolverStub()]
+        var all: [ItemType: AudioURLResolver] = [.youtube: YouTubeAudioResolverStub(), .podcast: PodcastAudioResolver()]
         all.merge(resolvers) { _, new in new }
         queue = TranscriptionQueue(
             library: FolderTranscriptionLibrary(access: folderStore),

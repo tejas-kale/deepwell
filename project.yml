@@ -43,7 +43,11 @@ targets:
         product: DeepwellMenu
       - package: DeepwellCore
         product: DeepwellCuration
+      - package: DeepwellCore
+        product: DeepwellPodcasts
       - target: DeepwellSafariExtension
+        embed: true
+      - target: DeepwellShareExtension
         embed: true
     settings:
       base:
@@ -79,6 +83,29 @@ targets:
         INFOPLIST_FILE: Extensions/SafariExtension/Native/Info.plist
     entitlements:
       path: Extensions/SafariExtension/Native/SafariExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.deepwell
+        com.apple.security.network.client: false
+  DeepwellShareExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extensions/ShareExtension
+      - path: Apps/Shared
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - package: DeepwellCore
+        product: DeepwellPodcasts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell.ShareExtension
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Extensions/ShareExtension/Info.plist
+    entitlements:
+      path: Extensions/ShareExtension/ShareExtension.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.application-groups:

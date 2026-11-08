@@ -31,7 +31,16 @@ public struct CapturePayload: Codable, Equatable, Sendable {
 
     public enum Invalid: Error, Equatable { case emptyBody, badURL, unsupportedType(String) }
 
+    /// A bare link from the Share Extension: no content yet; the app resolves it (podcast, YouTube) later.
+    public static let linkType = "link"
+    public static func link(_ url: URL) -> CapturePayload { CapturePayload(url: url.absoluteString, title: "", markdown: "", type: linkType) }
+    public var isLink: Bool { type == CapturePayload.linkType }
+
     public func validated() throws -> CapturePayload {
+        if isLink {
+            guard let u = URL(string: url), let scheme = u.scheme, ["http", "https"].contains(scheme) else { throw Invalid.badURL }
+            return self
+        }
         guard !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Invalid.emptyBody }
         guard let u = URL(string: url), let scheme = u.scheme, ["http", "https"].contains(scheme) else { throw Invalid.badURL }
         if let t = type, t != "article", t != "youtube" { throw Invalid.unsupportedType(t) }
