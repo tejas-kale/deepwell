@@ -33,13 +33,15 @@ public final class LibraryIndex: @unchecked Sendable {
         return dir.appendingPathComponent("index.sqlite")
     }
 
-    public init(url: URL) throws {
-        db = try SQLiteDB(path: url.path)
-        try migrate()
-    }
+    public convenience init(url: URL) throws { try self.init(path: url.path) }
 
     /// In-memory index, for tests.
-    public convenience init() throws { try self.init(url: URL(fileURLWithPath: ":memory:")) }
+    public convenience init() throws { try self.init(path: ":memory:") }
+
+    private init(path: String) throws {
+        db = try SQLiteDB(path: path)
+        try migrate()
+    }
 
     private func migrate() throws {
         let version = try db.query("PRAGMA user_version") { $0.int(0) }.first ?? 0
