@@ -18,15 +18,18 @@ final class AppModel {
     private let inbox = CaptureInbox(directory: SharedConfig.inboxDirectory)
     private var timer: Timer?
     let tagging: TaggingController
+    let transcription: TranscriptionController
 
     init() {
         phase = .needsFolder
         tagging = TaggingController(library: folderStore)
+        transcription = TranscriptionController(folderStore: folderStore)
         refreshPhase()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.drainInbox() }
         }
         drainInbox()
+        if case .ready = phase { transcription.start() }   // resume the persisted queue
     }
 
     private func refreshPhase() {
@@ -58,6 +61,6 @@ final class AppModel {
     func drainInbox() {
         guard case .ready = phase else { return }
         let result = inbox.drain(into: folderStore)
-        if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 }; tagging.kick() }
+        if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 }; tagging.kick(); transcription.start() }
     }
 }

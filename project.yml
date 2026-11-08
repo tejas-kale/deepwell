@@ -37,6 +37,8 @@ targets:
         product: DeepwellYouTube
       - package: DeepwellCore
         product: DeepwellIndex
+      - package: DeepwellCore
+        product: DeepwellTranscription
       - target: DeepwellSafariExtension
         embed: true
     settings:

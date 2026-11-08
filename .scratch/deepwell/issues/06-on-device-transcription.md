@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Items marked "needs transcript" are queued and transcribed in the background, one at a time
-- [ ] Progress is visible in the library; the item becomes readable when done
-- [ ] Transcription survives an app restart (the queue resumes)
-- [ ] Failure leaves the item saved with an error state and a retry action
+- [x] Items marked "needs transcript" are queued and transcribed in the background, one at a time
+- [x] Progress is visible in the library; the item becomes readable when done
+- [x] Transcription survives an app restart (the queue resumes)
+- [x] Failure leaves the item saved with an error state and a retry action
