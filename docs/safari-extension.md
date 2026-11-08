@@ -99,3 +99,14 @@ changed format would not be caught. YouTube has been tightening `timedtext` (PO 
 real track download returns empty, the video degrades to `needs_transcript`. Also unverified: Safari content-script
 `fetch`, the WKWebView embed (YouTube may refuse embeds with error 153 depending on referrer; the "Open in YouTube"
 link is the fallback) and timestamp seeking, and SwiftUI rendering of `YouTubeTranscriptView` (it compiles only).
+## Library and reader (ticket 02)
+
+- `DeepwellIndex` target: `LibraryIndex` (SQLite + FTS5 in `~/Library/Application Support/Deepwell/index.sqlite`,
+  schema-versioned cache, dropped and rebuilt on version change), `LibrarySync` (incremental by mtime; `rebuild()`
+  re-reads everything), `FolderWatcher` (FSEvents), `ICloudPlaceholder` (`.name.md.icloud` stubs: sync requests
+  download, `ensureLocal` downloads and waits before the reader opens a file), `ItemFileUpdater`/`ReadingState`
+  (progress/status write-back; progress only moves forward, >= 97% = done).
+- App glue: `LibraryModel`, `LibraryView`, `ReaderView`, `MarkdownBody` (small block renderer, not full CommonMark;
+  images/tables render as plain text).
+- Not verified: the SwiftUI views were compiled but never run; real iCloud eviction/download (tested with a fake
+  downloader); scroll-position restore is approximate.
