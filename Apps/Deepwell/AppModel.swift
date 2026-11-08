@@ -5,6 +5,7 @@ import DeepwellLibrary
 import DeepwellCapture
 import DeepwellTagging
 import DeepwellPodcasts
+import DeepwellMagazines
 
 @Observable
 @MainActor
@@ -23,17 +24,20 @@ final class AppModel {
     private var linkRetryAfter = Date.distantPast
     let tagging: TaggingController
     let transcription: TranscriptionController
+    let magazines: MagazineController
 
     init() {
         phase = .needsFolder
         tagging = TaggingController(library: folderStore)
         transcription = TranscriptionController(folderStore: folderStore)
+        let tagging = self.tagging
+        magazines = MagazineController(library: folderStore) { tagging.kick() }
         refreshPhase()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.drainInbox() }
         }
         drainInbox()
-        if case .ready = phase { transcription.start() }   // resume the persisted queue
+        if case .ready = phase { transcription.start(); magazines.run() }   // resume persisted queues
     }
 
     private func refreshPhase() {
@@ -64,6 +68,7 @@ final class AppModel {
 
     func drainInbox() {
         guard case .ready = phase else { return }
+        magazines.drainInbox()
         let result = inbox.drain(into: folderStore)
         if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 }; tagging.kick(); transcription.start() }
         resolveLinks()
@@ -82,5 +87,13 @@ final class AppModel {
             }
             if let first = outcome.failures.first { errorMessage = first; linkRetryAfter = Date().addingTimeInterval(60) }  // no hammering while offline
         }
+    }
+}
+
+extension AppModel {
+    /// Entry point for dropped / opened / shared PDF and EPUB files.
+    func importMagazines(_ urls: [URL]) {
+        guard case .ready = phase else { errorMessage = "Choose a library folder before importing."; return }
+        magazines.importFiles(urls)
     }
 }

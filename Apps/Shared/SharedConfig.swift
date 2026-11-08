@@ -21,5 +21,10 @@ enum SharedConfig {
             .appendingPathComponent("Deepwell/Inbox", isDirectory: true)
     }
 
+    /// Where the Share Extension drops shared magazine files (PDF/EPUB) for the app to import.
+    static var magazineInboxDirectory: URL {
+        inboxDirectory.deletingLastPathComponent().appendingPathComponent("MagazineInbox", isDirectory: true)
+    }
+
     static let wakeURL = URL(string: "deepwell://inbox")!
 }

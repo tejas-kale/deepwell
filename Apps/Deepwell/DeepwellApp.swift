@@ -8,7 +8,9 @@ struct DeepwellApp: App {
         WindowGroup {
             RootView(model: model)
                 .frame(minWidth: 480, minHeight: 320)
-                .onOpenURL { _ in model.drainInbox() }   // deepwell://inbox wake-up from the extension
+                .onOpenURL { url in   // deepwell://inbox wake-up from the extensions, or a PDF/EPUB opened via the Dock icon
+                    if url.isFileURL { model.importMagazines([url]) } else { model.drainInbox() }
+                }
         }
         Settings { SettingsView(tagging: model.tagging) }
     }

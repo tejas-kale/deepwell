@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepwellMagazines
 
 struct RootView: View {
     let model: AppModel
@@ -9,6 +10,12 @@ struct RootView: View {
             FirstLaunchView(model: model)
         case .ready(let folder):
             LibraryView(folder: folder).id(folder)
+                .dropDestination(for: URL.self) { urls, _ in
+                    let mags = urls.filter { $0.isFileURL && IssueFormat(pathExtension: $0.pathExtension) != nil }
+                    guard !mags.isEmpty else { return false }
+                    model.importMagazines(mags)
+                    return true
+                }
         }
     }
 }

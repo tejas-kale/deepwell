@@ -111,9 +111,9 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** â
 | 05 YouTube capture | Built | Fixtures are hand-written, not recorded from YouTube. Embed may be refused; link-out is the fallback. |
 | 06 On-device transcription | Built | `docs/transcription.md`. Uses `SFSpeechRecognizer` (SpeechAnalyzer needs macOS 26). YouTube audio fetching is **stubbed** (no sanctioned API); podcasts will use ticket 07's enclosure URLs. Status view not yet placed in the library list. |
 | 07 Share Extension / podcasts | Built, unverified in UI | `docs/podcasts.md`. Hand-written (not recorded) fixtures; Share Extension never launched; shared YouTube links always go through the no-captions path. |
-| 08 Magazine import | **Not started** | Needs 07. |
+| 08 Magazine import | Built, UI unverified | `docs/magazines.md`. Fixtures generated at test time, not real magazines; splitting prompt never run against the real API; drop, Dock, Share Extension and the reader jump never run. Shares one Share Extension target with 07 (merged by hand; combined activation rule untested). |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
 | 10 Monday schedule | Built, partly unverified | `docs/menu.md`. Scheduler tested with a fake clock; no real notification, timer run or UI run. Notification click-to-open untested. |
 
-Next steps: build 08 and 10; run the app and Safari manual tests; try the real API calls; wire
+Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.

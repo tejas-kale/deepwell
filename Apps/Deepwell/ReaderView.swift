@@ -1,6 +1,7 @@
 import SwiftUI
 import DeepwellModel
 import DeepwellIndex
+import DeepwellMagazines
 
 /// Opens one item: downloads it first if iCloud evicted it, renders the Markdown body, and writes scroll
 /// progress / status back to the file's frontmatter.
@@ -14,6 +15,7 @@ struct ReaderView: View {
     @State private var status: ItemStatus = .unread
     @State private var saveTask: Task<Void, Never>?
     @State private var lastProgress = 0.0
+    @State private var showIssue = false
 
     var body: some View {
         Group {
@@ -26,6 +28,9 @@ struct ReaderView: View {
                 YouTubeTranscriptView(document: doc)
             case .ready(let doc) where doc.item.type == .podcast:
                 PodcastPlayerView(document: doc)
+            case .ready(let doc) where showIssue && doc.item.type == .magazineArticle && doc.item.issueID != nil:
+                IssueReaderView(issueID: doc.item.issueID!, libraryFolder: url.deletingLastPathComponent(),
+                                startUnit: IssuePosition.read(doc.item)?.start ?? 0)
             case .ready(let doc):
                 ScrollProgressView(initialProgress: doc.item.progress) { p in progressChanged(p) } content: {
                     VStack(alignment: .leading, spacing: 12) {
@@ -40,6 +45,15 @@ struct ReaderView: View {
             }
         }
         .toolbar {
+            if case .ready(let doc) = phase, doc.item.type == .magazineArticle, doc.item.issueID != nil {
+                ToolbarItem {
+                    Picker("View", selection: $showIssue) {
+                        Text("Article text").tag(false)
+                        Text("In issue").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
             ToolbarItem {
                 Picker("Status", selection: Binding(get: { status }, set: setStatus)) {
                     ForEach(ItemStatus.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }

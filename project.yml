@@ -45,6 +45,8 @@ targets:
         product: DeepwellCuration
       - package: DeepwellCore
         product: DeepwellPodcasts
+      - package: DeepwellCore
+        product: DeepwellMagazines
       - target: DeepwellSafariExtension
         embed: true
       - target: DeepwellShareExtension
@@ -99,6 +101,8 @@ targets:
         product: DeepwellCapture
       - package: DeepwellCore
         product: DeepwellPodcasts
+      - package: DeepwellCore
+        product: DeepwellMagazines
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell.ShareExtension

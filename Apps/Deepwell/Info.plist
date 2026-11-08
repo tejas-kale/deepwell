@@ -14,6 +14,21 @@
 	<key>NSPrincipalClass</key><string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes podcast and video audio on this Mac, so you can read items that have no published transcript.</string>
 	<key>DeepwellAppGroup</key><string>$(TeamIdentifierPrefix)dev.deepwell</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key><string>PDF Document</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>LSItemContentTypes</key><array><string>com.adobe.pdf</string></array>
+			<key>LSHandlerRank</key><string>Alternate</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>EPUB Document</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>LSItemContentTypes</key><array><string>org.idpf.epub-container</string></array>
+			<key>LSHandlerRank</key><string>Alternate</string>
+		</dict>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
