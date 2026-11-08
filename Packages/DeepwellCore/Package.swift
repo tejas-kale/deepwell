@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "DeepwellTranscription", targets: ["DeepwellTranscription"]),
         .library(name: "DeepwellMenu", targets: ["DeepwellMenu"]),
         .library(name: "DeepwellCuration", targets: ["DeepwellCuration"]),
+        .library(name: "DeepwellMagazines", targets: ["DeepwellMagazines"]),
     ],
     targets: [
         .target(name: "DeepwellModel"),
@@ -38,6 +39,8 @@ let package = Package(
         .testTarget(name: "DeepwellMenuTests", dependencies: ["DeepwellMenu", "DeepwellTagging", "DeepwellIndex", "DeepwellModel"]),
         .target(name: "DeepwellCuration", dependencies: ["DeepwellModel", "DeepwellIndex", "DeepwellTagging"]),
         .testTarget(name: "DeepwellCurationTests", dependencies: ["DeepwellCuration", "DeepwellIndex", "DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
+        .target(name: "DeepwellMagazines", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellTagging"]),
+        .testTarget(name: "DeepwellMagazinesTests", dependencies: ["DeepwellMagazines", "DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
         .testTarget(name: "DeepwellModelTests", dependencies: ["DeepwellModel"]),
         .testTarget(name: "DeepwellLibraryTests", dependencies: ["DeepwellLibrary", "DeepwellModel"]),
         .testTarget(name: "DeepwellCaptureTests", dependencies: ["DeepwellCapture", "DeepwellLibrary", "DeepwellModel"]),
