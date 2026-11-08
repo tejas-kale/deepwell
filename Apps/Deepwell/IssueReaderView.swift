@@ -18,7 +18,7 @@ struct IssueReaderView: View {
 
     var body: some View {
         Group {
-            if let failure { Text(failure).foregroundStyle(.red).padding() }
+            if let failure { Text(failure).foregroundStyle(Ayu.red).padding() }
             else if let source {
                 switch source {
                 case .pdf(let url): PDFIssueView(url: url, page: startUnit)

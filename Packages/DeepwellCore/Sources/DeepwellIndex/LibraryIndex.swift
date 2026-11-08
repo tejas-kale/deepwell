@@ -42,7 +42,7 @@ public struct ItemFilter: Equatable, Sendable {
 public final class LibraryIndex: @unchecked Sendable {
     private let db: SQLiteDB
     private let lock = NSLock()
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
     private static let sep = "\u{1F}"
 
     public static func defaultIndexURL(fileManager fm: FileManager = .default) throws -> URL {
@@ -75,7 +75,7 @@ public final class LibraryIndex: @unchecked Sendable {
                   id TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL,
                   source_url TEXT, author TEXT, captured_at REAL NOT NULL,
                   word_count INTEGER, duration_minutes INTEGER,
-                  tags TEXT NOT NULL, new_tags TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, progress REAL NOT NULL, issue_id TEXT,
+                  tags TEXT NOT NULL, new_tags TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, progress REAL NOT NULL, issue_id TEXT, summary TEXT,
                   mtime REAL NOT NULL
                 )
                 """)
@@ -94,15 +94,15 @@ public final class LibraryIndex: @unchecked Sendable {
                 let i = document.item
                 try db.exec("""
                     INSERT INTO items (path,id,type,title,source_url,author,captured_at,word_count,duration_minutes,
-                                       tags,new_tags,status,progress,issue_id,mtime)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                       tags,new_tags,status,progress,issue_id,summary,mtime)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, [
                         .text(path), .text(i.id), .text(i.type.rawValue), .text(i.title),
                         text(i.sourceURL?.absoluteString), text(i.author),
                         .double(i.capturedAt.timeIntervalSince1970),
                         int(i.wordCount), int(i.durationMinutes),
                         .text(i.tags.joined(separator: Self.sep)), .text(NewTagFlag.read(i).joined(separator: Self.sep)), .text(i.status.rawValue), .double(i.progress),
-                        text(i.issueID), .double(modified.timeIntervalSince1970),
+                        text(i.issueID), text(i.summary), .double(modified.timeIntervalSince1970),
                     ])
                 let rowid = try db.query("SELECT last_insert_rowid()") { $0.int(0) }[0]
                 try db.exec("INSERT INTO items_fts(rowid,title,body) VALUES (?,?,?)",
@@ -207,7 +207,7 @@ public final class LibraryIndex: @unchecked Sendable {
                 WHERE items_fts MATCH ?\(extra)
                 ORDER BY bm25(items_fts, 5.0, 1.0)
                 LIMIT ?
-                """, params) { Self.decode($0, snippet: $0.text(14)) }
+                """, params) { Self.decode($0, snippet: $0.text(15)) }
         }
     }
 
@@ -222,17 +222,18 @@ public final class LibraryIndex: @unchecked Sendable {
 
     // MARK: Helpers
 
-    private static let columns = "path,id,type,title,source_url,author,captured_at,word_count,duration_minutes,tags,status,progress,issue_id,new_tags"
+    private static let columns = "path,id,type,title,source_url,author,captured_at,word_count,duration_minutes,tags,status,progress,issue_id,new_tags,summary"
 
     private static func decode(_ r: SQLiteDB.Row, snippet: String?) -> IndexedItem {
         let tags = r.text(9) ?? ""
-        let item = Item(
+        var item = Item(
             id: r.text(1) ?? "", type: ItemType(rawValue: r.text(2) ?? "") ?? .article, title: r.text(3) ?? "",
             sourceURL: r.text(4).flatMap(URL.init(string:)), author: r.text(5),
             capturedAt: Date(timeIntervalSince1970: r.double(6)),
             wordCount: r.isNull(7) ? nil : Int(r.int(7)), durationMinutes: r.isNull(8) ? nil : Int(r.int(8)),
             tags: tags.isEmpty ? [] : tags.components(separatedBy: sep),
             status: ItemStatus(rawValue: r.text(10) ?? "") ?? .unread, progress: r.double(11), issueID: r.text(12))
+        item.summary = r.text(14)
         let new = r.text(13) ?? ""
         return IndexedItem(relativePath: r.text(0) ?? "", item: item, snippet: snippet, newTags: new.isEmpty ? [] : new.components(separatedBy: sep))
     }

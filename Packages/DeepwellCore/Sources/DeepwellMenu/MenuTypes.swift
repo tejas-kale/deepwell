@@ -1,14 +1,16 @@
 import Foundation
 import DeepwellModel
 
-/// Sizing rules. Reading speed is a stated assumption: 230 words per minute.
+/// Sizing rules: bundles are sized by time only, up to 4 hours, with as many items as that takes (libraries are
+/// mostly 5-25 minute articles, so a fixed item count cannot also hit a time budget).
+/// Reading speed is a stated assumption: 230 words per minute.
 public enum MenuSizing {
     public static let wordsPerMinute = 230
-    public static let targetMinutes = 300          // about 5 hours
-    public static let minBundleMinutes = 240       // 4 h
-    public static let maxBundleMinutes = 360       // 6 h
-    public static let bundleCount = 3...5
-    public static let itemCount = 5...7
+    public static let maxBundleMinutes = 240       // 4 h: the aim, never exceeded
+    public static let minBundleMinutes = 150       // 2.5 h: anything thinner is not a week's focus
+    public static let minItems = 3
+    /// 1 is allowed because a small library may only hold enough for one good bundle.
+    public static let bundleCount = 1...5
 
     /// Minutes still needed for an item: `duration_minutes`, else `word_count / wpm` rounded up; nil if neither is
     /// known (such items are not eligible because they cannot be sized). Partly-read items count what is left.
@@ -29,16 +31,18 @@ public struct MenuCandidate: Equatable, Sendable {
     public var type: ItemType
     public var tags: [String]
     public var minutes: Int
+    /// One-sentence "what it is about" from auto-tagging; empty if the item has none yet.
+    public var summary: String
 
-    public init(id: String, title: String, type: ItemType, tags: [String], minutes: Int) {
-        self.id = id; self.title = title; self.type = type; self.tags = tags; self.minutes = minutes
+    public init(id: String, title: String, type: ItemType, tags: [String], minutes: Int, summary: String = "") {
+        self.id = id; self.title = title; self.type = type; self.tags = tags; self.minutes = minutes; self.summary = summary
     }
 
     /// Only unread or unfinished (status != done) items with a known length.
     public static func eligible(from items: [Item]) -> [MenuCandidate] {
         items.compactMap { i in
             guard i.status != .done, let m = MenuSizing.remainingMinutes(i) else { return nil }
-            return MenuCandidate(id: i.id, title: i.title, type: i.type, tags: i.tags, minutes: m)
+            return MenuCandidate(id: i.id, title: i.title, type: i.type, tags: i.tags, minutes: m, summary: i.summary ?? "")
         }
     }
 }
@@ -77,7 +81,8 @@ public struct PickRecord: Codable, Equatable, Sendable {
 }
 
 public enum MenuError: Error, Equatable {
-    case notEnoughItems(eligible: Int)
+    /// Not even one bundle's worth: too few eligible items or too few minutes in total.
+    case notEnoughItems(eligible: Int, minutes: Int)
     case invalidModelOutput(String)
     case noSuchBundle
 }

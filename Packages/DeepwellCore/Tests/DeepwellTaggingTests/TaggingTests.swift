@@ -5,10 +5,11 @@ import DeepwellLibrary
 
 final class StubModel: TaggingModel, @unchecked Sendable {
     var response: Result<[String], Error>
-    private(set) var calls: [(title: String, vocabulary: [String])] = []
+    private(set) var calls: [(title: String, vocabulary: [String], usage: [TagUsage], librarySize: Int)] = []
     init(_ r: Result<[String], Error>) { response = r }
-    func suggestTags(title: String, text: String, vocabulary: [String]) async throws -> [String] {
-        calls.append((title, vocabulary)); return try response.get()
+    func suggest(title: String, text: String, vocabulary: [TagUsage], librarySize: Int) async throws -> TagSuggestion {
+        calls.append((title, vocabulary.map(\.name), vocabulary, librarySize))
+        return TagSuggestion(tags: try response.get(), summary: "About \(title).")
     }
 }
 
@@ -55,26 +56,45 @@ final class TaggerTests: XCTestCase {
 }
 
 final class AnthropicClientTests: XCTestCase {
-    func testRequestShapeAndPromptContainsVocabulary() async throws {
+    func testRequestShapeAndPromptContainsVocabularyWithCounts() async throws {
         let captured = Box<URLRequest>()
         let model = AnthropicTaggingModel(keys: InMemoryAPIKeyStore(key: "sk-test"),
-                                          transport: StubTransport { req in captured.value = req; return (reply("[\"rust\"]"), 200) })
-        let tags = try await model.suggestTags(title: "T", text: "body", vocabulary: ["rust", "go"])
-        XCTAssertEqual(tags, ["rust"])
+                                          transport: StubTransport { req in
+                                              captured.value = req
+                                              return (reply("{\"summary\": \"Ownership in Rust.\", \"tags\": [\"rust\"]}"), 200)
+                                          })
+        let s = try await model.suggest(title: "T", text: "body",
+                                        vocabulary: [TagUsage(name: "go", count: 1), TagUsage(name: "rust", count: 3)], librarySize: 9)
+        XCTAssertEqual(s, TagSuggestion(tags: ["rust"], summary: "Ownership in Rust."))
         let req = try XCTUnwrap(captured.value)
         XCTAssertEqual(req.value(forHTTPHeaderField: "x-api-key"), "sk-test")
         XCTAssertEqual(req.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: req.httpBody!) as? [String: Any])
         XCTAssertEqual(body["model"] as? String, "claude-haiku-5-5")
         let msg = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
-        XCTAssertTrue(msg.contains("[\"rust\",\"go\"]"))
+        XCTAssertTrue(msg.contains("rust (3), go (1)"), msg)     // most used first
+        XCTAssertTrue(msg.contains("Library size: 9 items"), msg)
+        // Room for thinking + answer, low effort, and a JSON schema so the reply is always parseable.
+        XCTAssertEqual(body["max_tokens"] as? Int, 2000)
+        let config = try XCTUnwrap(body["output_config"] as? [String: Any])
+        XCTAssertEqual(config["effort"] as? String, "low")
+        let format = try XCTUnwrap(config["format"] as? [String: Any])
+        XCTAssertEqual(format["type"] as? String, "json_schema")
+        XCTAssertEqual((format["schema"] as? [String: Any])?["required"] as? [String], ["summary", "tags"])
     }
 
-    func testParsesFencedJSON() async throws {
-        let model = AnthropicTaggingModel(keys: InMemoryAPIKeyStore(key: "k"),
-                                          transport: StubTransport { _ in (reply("```json\n[\"a\", \"b\"]\n```"), 200) })
-        let tags = try await model.suggestTags(title: "", text: "", vocabulary: [])
-        XCTAssertEqual(tags, ["a", "b"])
+    func testReplyCutOffByMaxTokensSaysSo() async {
+        let truncated = try! JSONSerialization.data(withJSONObject: [
+            "stop_reason": "max_tokens", "content": [["type": "thinking", "thinking": ""]]])
+        let m = AnthropicTaggingModel(keys: InMemoryAPIKeyStore(key: "k"), transport: StubTransport { _ in (truncated, 200) })
+        await assertThrows(m, .incomplete(stopReason: "max_tokens"))
+    }
+
+    func testParsesFencedObjectAndFallsBackToBareArray() throws {
+        XCTAssertEqual(try AnthropicTaggingModel.parseSuggestion("```json\n{\"summary\": \" S \", \"tags\": [\"a\", \"b\"]}\n```"),
+                       TagSuggestion(tags: ["a", "b"], summary: "S"))
+        XCTAssertEqual(try AnthropicTaggingModel.parseSuggestion("```json\n[\"a\", \"b\"]\n```"),
+                       TagSuggestion(tags: ["a", "b"], summary: ""))
     }
 
     func testMissingKeyAPIErrorAndMalformed() async {
@@ -90,7 +110,7 @@ final class AnthropicClientTests: XCTestCase {
     }
 
     private func assertThrows(_ m: AnthropicTaggingModel, _ expected: TaggingError, line: UInt = #line) async {
-        do { _ = try await m.suggestTags(title: "", text: "", vocabulary: []); XCTFail("no throw", line: line) }
+        do { _ = try await m.suggest(title: "", text: "", vocabulary: [], librarySize: 0); XCTFail("no throw", line: line) }
         catch { XCTAssertEqual(error as? TaggingError, expected, line: line) }
     }
 }
@@ -104,8 +124,10 @@ final class TaggingServiceTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(at: dir) }
 
     @discardableResult
-    func write(_ title: String, tags: [String] = [], extra: [String] = []) throws -> URL {
-        let item = Item(type: .article, title: title, tags: tags, extraFrontmatter: extra)
+    /// Tagged items get a summary unless `summary` is nil (an item tagged before summaries existed).
+    func write(_ title: String, tags: [String] = [], extra: [String] = [], summary: String? = "Done.") throws -> URL {
+        var item = Item(type: .article, title: title, tags: tags, extraFrontmatter: extra)
+        if !tags.isEmpty { item.summary = summary }
         return try ItemFileWriter.write(ItemDocument(item: item, body: "Body of \(title)"), into: dir)
     }
     func read(_ url: URL) throws -> Item { try FrontmatterCodec.decode(String(contentsOf: url, encoding: .utf8)).item }
@@ -125,6 +147,42 @@ final class TaggingServiceTests: XCTestCase {
         let item = try read(url)
         XCTAssertEqual(item.tags, ["rust", "wasm"])
         XCTAssertEqual(NewTagFlag.read(item), ["wasm"])
+        XCTAssertEqual(item.summary, "About New.")
+        XCTAssertEqual(stub.calls[0].librarySize, 2)
+    }
+
+    func testItemsTaggedBeforeSummariesAreRetaggedOnceWithoutOldTagsAsVocabulary() async throws {
+        try write("Current", tags: ["databases"])
+        let legacy = try write("Legacy", tags: ["ai-agents"], summary: nil)
+        let stub = StubModel(.success(["machine-learning", "agent-memory"]))
+        let svc = service(stub)
+        let s = await svc.processPending()
+        XCTAssertEqual(s.tagged.count, 1)
+        XCTAssertEqual(stub.calls[0].vocabulary, ["databases"])     // "ai-agents" does not steer the re-tag
+        let item = try read(legacy)
+        XCTAssertEqual(item.tags, ["machine-learning", "agent-memory"])
+        XCTAssertEqual(item.summary, "About Legacy.")
+        _ = await svc.processPending()
+        XCTAssertEqual(stub.calls.count, 1)                         // once only
+    }
+
+    func testVocabularyCountsItemsPerTag() async throws {
+        try write("A", tags: ["rust", "databases"]); try write("B", tags: ["Rust"])
+        try write("Fresh")
+        let stub = StubModel(.success(["rust"]))
+        _ = await service(stub).processPending()
+        XCTAssertEqual(stub.calls[0].usage.sorted { $0.name < $1.name },
+                       [TagUsage(name: "databases", count: 1), TagUsage(name: "rust", count: 2)])
+    }
+
+    func testSummaryRoundTripsWithQuotesAndNewlines() throws {
+        var item = Item(type: .article, title: "t")
+        item.summary = "He said \"no\" to\nURLs like a/b."
+        let decoded = try FrontmatterCodec.decode(FrontmatterCodec.encode(ItemDocument(item: item, body: "x"))).item
+        XCTAssertEqual(decoded.summary, "He said \"no\" to URLs like a/b.")
+        var cleared = decoded; cleared.summary = nil
+        XCTAssertNil(cleared.summary)
+        XCTAssertTrue(cleared.extraFrontmatter.isEmpty)
     }
 
     func testFlagSurvivesRoundTripAndAlreadyTaggedItemsAreUntouched() async throws {
@@ -155,9 +213,25 @@ final class TaggingServiceTests: XCTestCase {
         XCTAssertTrue(try read(url).tags.isEmpty)
     }
 
+    func testRateLimitStopsThePassPausesServiceAndDoesNotPenaliseUntriedItems() async throws {
+        for t in ["A", "B", "C"] { try write(t) }
+        let stub = StubModel(.failure(TaggingError.api(status: 429, message: "rate limited")))
+        let clock = Box<Date>(Date())
+        let svc = service(stub, clock: clock)
+        var s = await svc.processPending()
+        XCTAssertEqual(stub.calls.count, 1)                          // stopped at the first 429, no burst
+        XCTAssertNotNil(s.pausedUntil)
+        s = await svc.processPending()                               // still paused: no call
+        XCTAssertEqual(stub.calls.count, 1)
+        clock.value = clock.value!.addingTimeInterval(61)
+        stub.response = .success(["recovered"])
+        s = await svc.processPending()
+        XCTAssertEqual(s.tagged.count, 3)                            // all three, none stuck in per-item backoff
+    }
+
     func testFailureLeavesItemUntaggedBacksOffThenRetries() async throws {
         let url = try write("Fresh")
-        let stub = StubModel(.failure(TaggingError.network("offline")))
+        let stub = StubModel(.failure(TaggingError.malformedResponse))   // item-specific: per-item backoff
         let clock = Box<Date>(Date())
         let svc = service(stub, clock: clock)
         var s = await svc.processPending()

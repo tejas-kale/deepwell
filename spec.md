@@ -1,14 +1,14 @@
 # Deepwell — spec
 
 Deepwell is a native Mac app (later iPhone/iPad) that captures things to read or watch — articles, YouTube
-videos, podcast episodes and magazine issues — tags them by topic with an LLM, and each Monday offers a menu
+videos, podcast episodes and magazine issues — tags them by topic with an LLM, and on request builds a menu
 of topic bundles so you can go deep on one topic per week.
 
 ## Goals
 
 - Capturing from Safari takes one keystroke and uses your existing Safari logins (no separate browser window).
 - Every item ends up as a Markdown file you can read in the app, Finder or Obsidian.
-- Each Monday you pick one topic bundle to go deep on that week.
+- When you ask for it, you pick one topic bundle (your Current Focus) to go deep on that week.
 
 ## Non-goals (v1)
 
@@ -73,10 +73,10 @@ of topic bundles so you can go deep on one topic per week.
 
 ## Weekly menu
 
-- Built on the Mac every Monday at 07:00, or on the first launch after that if the Mac was off. A
-  notification follows.
-- Sonnet receives unread items (titles, tags, length) and returns **3–5 topic bundles of 5–7 items each**:
-  - each bundle is sized to about **5 hours** of reading/listening;
+- Built only on demand (Build Menu / Rebuild in Current Focus, or Library > Weekly Menu). There is no
+  schedule and no notification.
+- Sonnet receives unread and in-progress items (titles, tags, summaries, length; finished items, including those from the previous focus list, are never offered) and returns **up to 5 topic bundles** (3–5 when the library allows):
+  - each bundle is sized by time only: **at most 4 hours** (at least 2.5 h), with as many items as that takes;
   - items are ordered from introductory to deeper, each with a one-line reason;
   - topics picked in recent weeks are deprioritised.
 - You pick **one** bundle. It becomes the week's ordered queue, with progress shown. Nothing is removed from
@@ -113,7 +113,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 | 07 Share Extension / podcasts | Built, unverified in UI | `docs/podcasts.md`. Hand-written (not recorded) fixtures; Share Extension never launched; shared YouTube links always go through the no-captions path. |
 | 08 Magazine import | Built, UI unverified | `docs/magazines.md`. Fixtures generated at test time, not real magazines; splitting prompt never run against the real API; drop, Dock, Share Extension and the reader jump never run. Shares one Share Extension target with 07 (merged by hand; combined activation rule untested). |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
-| 10 Monday schedule | Built, partly unverified | `docs/menu.md`. Scheduler tested with a fake clock; no real notification, timer run or UI run. Notification click-to-open untested. |
+| 10 Monday schedule | Removed | Replaced by on-demand building; scheduler, notification and their tests deleted. |
 
 Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.

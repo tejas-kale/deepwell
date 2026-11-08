@@ -59,3 +59,32 @@ test("non-article page returns null or minimal", () => {
   const r = extract(dom.window.document, "https://x.test/", { Readability, TurndownService, gfm });
   assert.ok(r === null || r.wordCount < 50);
 });
+
+test("substack linked image with commas in srcset URLs keeps the full image URL", () => {
+  const cdn = "https://substackcdn.com/image/fetch/$s_!TXCo!,w_1456,c_limit,f_webp,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fabc_1400x400.png";
+  const full = "https://substackcdn.com/image/fetch/$s_!TXCo!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fabc_1400x400.png";
+  const para = "<p>" + "Retrieval systems are simpler than people think and most teams over-engineer them badly. ".repeat(12) + "</p>";
+  const html = `<html><head><title>RAG</title></head><body><article><h1>RAG</h1>${para}
+    <figure><a class="image-link" href="${full}"><picture>
+      <source type="image/webp" srcset="${cdn.replace("w_1456", "w_424")} 424w, ${cdn} 1456w">
+      <img src="${cdn.replace("w_1456", "w_424")}" srcset="${cdn.replace("w_1456", "w_424")} 424w, ${cdn} 1456w" alt="Flow diagram">
+    </picture></a></figure>${para}${para}</article></body></html>`;
+  const dom = new JSDOM(html, { url: "https://www.lighthousenewsletter.com/p/rag" });
+  const r = extract(dom.window.document, "https://www.lighthousenewsletter.com/p/rag", { Readability, TurndownService, gfm });
+  assertClean(r);
+  assert.ok(r.markdown.includes(`![Flow diagram](${full})`), r.markdown.slice(0, 2000));
+  assert.ok(!/^\[$/m.test(r.markdown), "no stray [ line");
+  assert.ok(!r.markdown.includes("lighthousenewsletter.com/p/fl_"), "no URL broken at a comma");
+});
+
+test("headings with chrome-like classes (Substack's header-anchor-post) survive", () => {
+  const para = "<p>" + "Most teams over-engineer retrieval when full-text search would do the job well enough. ".repeat(12) + "</p>";
+  const html = `<html><head><title>RAG</title></head><body><article><h1>RAG</h1>${para}
+    <h3 class="header-anchor-post">Recipe 1: The MVP</h3>${para}
+    <h4 class="header-anchor-post">When to use</h4>${para}</article></body></html>`;
+  const dom = new JSDOM(html, { url: "https://example.substack.com/p/rag" });
+  const r = extract(dom.window.document, "https://example.substack.com/p/rag", { Readability, TurndownService, gfm });
+  assertClean(r);
+  assert.match(r.markdown, /^### Recipe 1: The MVP$/m);
+  assert.match(r.markdown, /^#### When to use$/m);
+});

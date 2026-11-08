@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import DeepwellModel
 import DeepwellIndex
 import DeepwellMagazines
@@ -23,7 +24,7 @@ struct ReaderView: View {
             case .loading:
                 VStack { ProgressView(); Text("Downloading from iCloud…").font(.caption).foregroundStyle(.secondary) }
             case .failed(let msg):
-                Text(msg).foregroundStyle(.red).padding()
+                Text(msg).foregroundStyle(Ayu.red).padding()
             case .ready(let doc) where doc.item.type == .youtube:
                 YouTubeTranscriptView(document: doc)
             case .ready(let doc) where doc.item.type == .podcast:
@@ -168,16 +169,35 @@ struct ArticleHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(item.title).font(.system(size: 34, weight: .bold, design: .serif)).lineSpacing(2)
+            if let url = item.sourceURL {
+                Button { openInSafari(url) } label: {
+                    Text(item.title).multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 34, weight: .bold, design: .serif)).lineSpacing(2)
+                .onHover { inside in if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                .help("Open in Safari")
+            } else {
+                Text(item.title).font(.system(size: 34, weight: .bold, design: .serif)).lineSpacing(2)
+            }
             HStack(spacing: 6) {
                 Text([item.author, site, readTime].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                 if let url = item.sourceURL {
                     Text("·")
-                    Link("Open original", destination: url)
+                    Button("Open original") { openInSafari(url) }.buttonStyle(.link)
                 }
             }
             .font(.callout).foregroundStyle(.secondary)
             Divider().padding(.top, 6)
         }
+    }
+}
+
+/// Opens a web page in Safari specifically (falls back to the default browser if Safari can't be found).
+func openInSafari(_ url: URL) {
+    let ws = NSWorkspace.shared
+    guard let safari = ws.urlForApplication(withBundleIdentifier: "com.apple.Safari") else { ws.open(url); return }
+    ws.open([url], withApplicationAt: safari, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+        if error != nil { DispatchQueue.main.async { ws.open(url) } }
     }
 }

@@ -39,13 +39,13 @@ struct TagsView: View {
                     Text(tag.name)
                     if tag.newCount > 0 {
                         Text("new").font(.caption2.bold()).padding(.horizontal, 5)
-                            .background(.orange.opacity(0.25), in: Capsule())
+                            .background(Ayu.accent.opacity(0.3), in: Capsule())
                     }
                     Spacer()
                     Text("\(tag.itemCount)").foregroundStyle(.secondary).monospacedDigit()
                 }
                 .contextMenu {
-                    Button("Show Items") { model.tagFilter = tag.name; dismiss() }
+                    Button("Show Items") { model.searchText = ""; model.section = .tag(tag.name); dismiss() }
                     Button("Rename…") { text = tag.name; renaming = tag }
                     Menu("Merge Into") {
                         ForEach(model.tagSummaries.filter { $0.name != tag.name }, id: \.name) { other in
@@ -57,7 +57,9 @@ struct TagsView: View {
                     Button("Delete…", role: .destructive) { deleting = tag }
                 }
             }
+            .ayuSurface(Ayu.background)
         }
+        .background(Ayu.panel)
         .frame(minWidth: 420, minHeight: 420)
         .alert("Rename tag", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("New name", text: $text)

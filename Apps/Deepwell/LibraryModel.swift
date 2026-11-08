@@ -4,6 +4,24 @@ import DeepwellModel
 import DeepwellIndex
 import DeepwellCuration
 
+/// What the sidebar has selected. Current Focus is this week's bundle; the rest are views of all captures.
+enum LibrarySection: Hashable {
+    case focus
+    case all
+    case type(ItemType)
+    case status(ItemStatus)
+    case tag(String)
+
+    var filter: ItemFilter {
+        switch self {
+        case .focus, .all: ItemFilter()
+        case .type(let t): ItemFilter(type: t)
+        case .status(let s): ItemFilter(status: s)
+        case .tag(let t): ItemFilter(tag: t)
+        }
+    }
+}
+
 /// Glue between the library folder, the SQLite index and the views. All logic lives in DeepwellIndex.
 @Observable
 @MainActor
@@ -11,10 +29,14 @@ final class LibraryModel {
     private(set) var items: [IndexedItem] = []
     private(set) var errorMessage: String?
     var searchText = "" { didSet { reload() } }
-    var typeFilter: ItemType? { didSet { reload() } }
-    var statusFilter: ItemStatus? { didSet { reload() } }
-    var tagFilter: String? { didSet { reload() } }
+    var section: LibrarySection = .focus { didSet { if section != oldValue { reload() } } }
     private(set) var tagSummaries: [TagSummary] = []
+    /// Every indexed item, unfiltered, for sidebar counts and for opening items from the week's bundle.
+    private(set) var allItems: [IndexedItem] = []
+    private var byID: [String: IndexedItem] = [:]
+    private var byPath: [String: IndexedItem] = [:]
+    /// Bumped on every reload, so views can refresh things derived from item status (the week's progress).
+    private(set) var revision = 0
 
     let folder: URL
     private(set) var index: LibraryIndex?
@@ -46,6 +68,10 @@ final class LibraryModel {
     }
 
     func fileURL(for item: IndexedItem) -> URL { folder.appendingPathComponent(item.relativePath) }
+    func entry(id: String) -> IndexedItem? { byID[id] }
+    func entry(path: String) -> IndexedItem? { byPath[path] }
+    func count(_ type: ItemType) -> Int { allItems.filter { $0.item.type == type }.count }
+    func count(_ status: ItemStatus) -> Int { allItems.filter { $0.item.status == status }.count }
 
     /// Re-scan the folder off the main thread, then refresh the list.
     func scheduleSync(rebuild: Bool = false) {
@@ -67,7 +93,7 @@ final class LibraryModel {
         errorMessage = result.failed.isEmpty ? nil
             : "\(result.failed.count) file(s) could not be updated: \(result.failed.keys.sorted().joined(separator: ", "))"
         reload()
-        if let t = tagFilter, !tagSummaries.contains(where: { $0.name == t }) { tagFilter = nil }
+        if case .tag(let t) = section, !tagSummaries.contains(where: { $0.name == t }) { section = .all }
     }
 
     func reportCurationError(_ message: String) { errorMessage = message; reload() }
@@ -76,14 +102,18 @@ final class LibraryModel {
 
     func reload() {
         guard let index else { return }
-        let filter = ItemFilter(type: typeFilter, status: statusFilter, tag: tagFilter)
         tagSummaries = (try? index.tagSummaries()) ?? tagSummaries
         do {
+            allItems = try index.list()
+            byID = Dictionary(allItems.map { ($0.item.id, $0) }, uniquingKeysWith: { a, _ in a })
+            byPath = Dictionary(allItems.map { ($0.relativePath, $0) }, uniquingKeysWith: { a, _ in a })
+            let filter = section.filter
             items = searchText.trimmingCharacters(in: .whitespaces).isEmpty
-                ? try index.list(filter: filter)
+                ? (filter == ItemFilter() ? allItems : try index.list(filter: filter))
                 : try index.search(searchText, filter: filter)
         } catch {
             errorMessage = "Query failed: \(error.localizedDescription)"
         }
+        revision += 1
     }
 }

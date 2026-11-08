@@ -15,22 +15,58 @@ public struct AnthropicMenuModel: MenuModel {
         client = AnthropicClient(keys: keys, transport: transport)
         self.model = model
     }
+    /// Structured output: the reply is guaranteed to be this JSON shape (it used to come back as prose).
+    static let schema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "bundles": [
+                "type": "array",
+                "items": [
+                    "type": "object",
+                    "properties": [
+                        "topic": ["type": "string"],
+                        "items": [
+                            "type": "array",
+                            "items": [
+                                "type": "object",
+                                "properties": ["id": ["type": "string"], "reason": ["type": "string"]],
+                                "required": ["id", "reason"],
+                                "additionalProperties": false,
+                            ],
+                        ],
+                    ],
+                    "required": ["topic", "items"],
+                    "additionalProperties": false,
+                ],
+            ],
+        ],
+        "required": ["bundles"],
+        "additionalProperties": false,
+    ]
+
+    /// Sonnet 5.5 thinks by default (effort `high`), and thinking counts against max_tokens, so an 8k budget
+    /// could end before any JSON. Medium effort and a 16k budget (the non-streaming ceiling) leave room for both.
     public func complete(system: String, user: String) async throws -> String {
-        try await client.complete(model: model, system: system, user: user, maxTokens: 4000, timeout: 120)
+        try await client.complete(model: model, system: system, user: user, maxTokens: 16000, timeout: 300,
+                                  effort: "medium", schema: Self.schema)
     }
 }
 
 public struct MenuBuilder: Sendable {
-    /// Below this many eligible items 3 bundles x 5 items cannot exist; don't spend an API call.
-    public static let minimumEligible = 15
+    /// Without at least one bundle's worth of material (3 items, 2.5 h) no bundle can exist; don't spend an API call.
+    public static func hasEnoughMaterial(_ c: [MenuCandidate]) -> Bool {
+        c.count >= MenuSizing.minItems && c.reduce(0, { $0 + $1.minutes }) >= MenuSizing.minBundleMinutes
+    }
 
     let model: MenuModel
     public init(model: MenuModel) { self.model = model }
 
-    /// Builds validated bundles. Calls the model; if fewer than 3 bundles survive validation (or the output is
+    /// Builds validated bundles. Calls the model; if no bundle survives validation (or the output is
     /// unparseable) retries once with the problems appended; otherwise throws `invalidModelOutput`.
     public func build(candidates: [MenuCandidate], recentTopics: [String] = []) async throws -> [MenuBundle] {
-        guard candidates.count >= Self.minimumEligible else { throw MenuError.notEnoughItems(eligible: candidates.count) }
+        guard Self.hasEnoughMaterial(candidates) else {
+            throw MenuError.notEnoughItems(eligible: candidates.count, minutes: candidates.reduce(0) { $0 + $1.minutes })
+        }
         let shown = Array(candidates.prefix(MenuPrompt.maxCandidates))   // validate against what the model saw
         var feedback: [String] = []
         for _ in 0..<2 {

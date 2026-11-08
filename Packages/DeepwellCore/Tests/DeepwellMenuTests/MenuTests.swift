@@ -27,8 +27,8 @@ struct StubTransport: HTTPTransport {
     }
 }
 
-/// 24 candidates c00...c23, 60 minutes each.
-private func candidates(_ n: Int = 24, minutes: Int = 60) -> [MenuCandidate] {
+/// 24 candidates c00...c23, 45 minutes each.
+private func candidates(_ n: Int = 24, minutes: Int = 45) -> [MenuCandidate] {
     (0..<n).map { MenuCandidate(id: String(format: "c%02d", $0), title: "T\($0)", type: .article, tags: ["x"], minutes: minutes) }
 }
 
@@ -38,7 +38,7 @@ private func bundleJSON(_ topic: String, _ ids: [String]) -> String {
 }
 private func menuJSON(_ bundles: [String]) -> String { "```json\n{\"bundles\":[\(bundles.joined(separator: ","))]}\n```" }
 
-/// Five 60-min items = 300 min each.
+/// Five 45-min items = 225 min each.
 private let good = menuJSON([
     bundleJSON("A", ["c00", "c01", "c02", "c03", "c04"]),
     bundleJSON("B", ["c05", "c06", "c07", "c08", "c09"]),
@@ -69,14 +69,14 @@ final class ValidatorTests: XCTestCase {
     func testAcceptsGoodMenuAndComputesMinutesFromData() throws {
         let r = try MenuValidator.validate(good, candidates: candidates())
         XCTAssertTrue(r.isValid)
-        XCTAssertEqual(r.bundles.map(\.totalMinutes), [300, 300, 300])
+        XCTAssertEqual(r.bundles.map(\.totalMinutes), [225, 225, 225])
         XCTAssertEqual(r.bundles[0].entries[0].reason, "because c00")
     }
     func testDropsUnknownAndDuplicateIdsThenBundleTooSmall() throws {
         let raw = menuJSON([
             bundleJSON("A", ["c00", "c01", "c02", "c03", "c04"]),
-            bundleJSON("B", ["c05", "c06", "c07", "c08", "zzz"]),         // 4 valid -> dropped
-            bundleJSON("C", ["c00", "c10", "c11", "c12", "c13", "c14"]),  // c00 reused -> 5 left, 300
+            bundleJSON("B", ["c05", "c06", "zzz", "yyy"]),                // 2 valid -> dropped
+            bundleJSON("C", ["c00", "c10", "c11", "c12", "c13", "c14"]),  // c00 reused -> 5 left, 225
             bundleJSON("D", ["c15", "c16", "c17", "c18", "c19"]),
         ])
         let r = try MenuValidator.validate(raw, candidates: candidates())
@@ -84,26 +84,39 @@ final class ValidatorTests: XCTestCase {
         XCTAssertEqual(r.bundles[1].entries.count, 5)
         XCTAssertTrue(r.problems.contains { $0.contains("unknown item id zzz") })
     }
-    func testTruncatesToSevenButDropsIfThenOutOfTimeRange() throws {
-        // 10 x 60 min ids cut to 7 = 420 min > 360 -> dropped. With 40-min items 7 = 280 -> kept.
-        let ids = (0..<10).map { String(format: "c%02d", $0) }
-        let r = try MenuValidator.validate(menuJSON([bundleJSON("A", ids)]), candidates: candidates())
-        XCTAssertTrue(r.bundles.isEmpty)
-        let r2 = try MenuValidator.validate(menuJSON([bundleJSON("A", ids)]), candidates: candidates(minutes: 40))
-        XCTAssertEqual(r2.bundles[0].entries.count, 7)
+    func testManyShortItemsAreFineAndOverFourHoursLosesDeepestItems() throws {
+        // 20 x 12 min = 240: fits exactly, no item cap.
+        let ids = (0..<20).map { String(format: "c%02d", $0) }
+        let r = try MenuValidator.validate(menuJSON([bundleJSON("A", ids)]), candidates: candidates(minutes: 12))
+        XCTAssertEqual(r.bundles.first?.entries.count, 20)
+        // 10 x 45 = 450 > 240: cut from the end to 5 x 45 = 225, and the cut items stay free for later bundles.
+        let r2 = try MenuValidator.validate(menuJSON([bundleJSON("A", Array(ids.prefix(10))),
+                                                      bundleJSON("B", ["c05", "c06", "c07", "c08"])]),
+                                            candidates: candidates())
+        XCTAssertEqual(r2.bundles.map { $0.entries.map(\.itemID) }, [["c00", "c01", "c02", "c03", "c04"], ["c05", "c06", "c07", "c08"]])
+        XCTAssertTrue(r2.problems.contains { $0.contains("deepest items cut to 225") })
     }
-    func testDropsBundlesOutsideFourToSixHours() throws {
-        let short = candidates(24, minutes: 30)  // 5 x 30 = 150
-        let r = try MenuValidator.validate(menuJSON([bundleJSON("A", ["c00", "c01", "c02", "c03", "c04"])]), candidates: short)
+    func testDropsBundlesUnderTwoAndAHalfHoursOrUnderThreeItems() throws {
+        let r = try MenuValidator.validate(menuJSON([bundleJSON("A", ["c00", "c01", "c02"])]), candidates: candidates())  // 135
         XCTAssertTrue(r.bundles.isEmpty)
-        XCTAssertTrue(r.problems.contains { $0.contains("totals 150") })
+        XCTAssertFalse(r.isValid)
+        XCTAssertTrue(r.problems.contains { $0.contains("totals 135") })
+        let r2 = try MenuValidator.validate(menuJSON([bundleJSON("A", ["c00", "c01"])]), candidates: candidates(minutes: 100))
+        XCTAssertTrue(r2.problems.contains { $0.contains("need at least 3") })
+    }
+    func testOneBundleIsEnough() throws {
+        let r = try MenuValidator.validate(menuJSON([bundleJSON("A", ["c00", "c01", "c02", "c03"])]), candidates: candidates())
+        XCTAssertTrue(r.isValid)
     }
     func testCapsAtFiveBundles() throws {
         let six = menuJSON((0..<6).map { b in bundleJSON("T\(b)", (0..<5).map { String(format: "c%02d", b * 5 + $0) }) })
         XCTAssertEqual(try MenuValidator.validate(six, candidates: candidates(30)).bundles.count, 5)
     }
-    func testGarbageThrows() {
-        XCTAssertThrowsError(try MenuValidator.validate("sorry", candidates: candidates()))
+    func testGarbageThrowsQuotingTheReply() {
+        XCTAssertThrowsError(try MenuValidator.validate("Sorry, these items\ncan't make bundles.", candidates: candidates())) {
+            guard case MenuError.invalidModelOutput(let why) = $0 else { return XCTFail() }
+            XCTAssertTrue(why.contains("\"Sorry, these items can't make bundles.\""), why)
+        }
     }
 }
 
@@ -114,20 +127,38 @@ final class BuilderTests: XCTestCase {
         XCTAssertEqual(b.count, 3)
         XCTAssertEqual(model.prompts.count, 2)
         XCTAssertTrue(model.prompts[0].contains("Recently picked topics (deprioritise): rust"))
-        XCTAssertTrue(model.prompts[0].contains("c00 | T0 | article | x | 60"))
+        XCTAssertTrue(model.prompts[0].contains("c00 | T0 | article | x | 45"))
         XCTAssertTrue(model.prompts[1].contains("previous answer had problems"))
     }
     func testThrowsAfterSecondFailure() async {
-        let model = ScriptedModel(["nope", menuJSON([bundleJSON("A", ["c00", "c01", "c02", "c03", "c04"])])])
+        let model = ScriptedModel(["nope", menuJSON([bundleJSON("A", ["c00", "c01"])])])
         do { _ = try await MenuBuilder(model: model).build(candidates: candidates()); XCTFail() }
         catch { XCTAssertTrue(error is MenuError) }
         XCTAssertEqual(model.prompts.count, 2)
     }
-    func testTooFewItemsDoesNotCallModel() async {
+    func testNotEnoughMaterialDoesNotCallModel() async {
         let model = ScriptedModel([good])
-        do { _ = try await MenuBuilder(model: model).build(candidates: candidates(10)); XCTFail() }
-        catch { XCTAssertEqual(error as? MenuError, .notEnoughItems(eligible: 10)) }
+        do { _ = try await MenuBuilder(model: model).build(candidates: candidates(3, minutes: 40)); XCTFail() }
+        catch { XCTAssertEqual(error as? MenuError, .notEnoughItems(eligible: 3, minutes: 120)) }   // < 150 min
+        do { _ = try await MenuBuilder(model: model).build(candidates: candidates(2, minutes: 100)); XCTFail() }
+        catch { XCTAssertEqual(error as? MenuError, .notEnoughItems(eligible: 2, minutes: 200)) }   // < 3 items
         XCTAssertTrue(model.prompts.isEmpty)
+    }
+    func testLibraryOfShortArticlesBuilds() async throws {
+        // The real-world shape that used to fail: many 5-25 min items.
+        let items = (0..<30).map { MenuCandidate(id: "s\($0)", title: "S\($0)", type: .article, tags: [], minutes: 15) }
+        let ids = (0..<16).map { "s\($0)" }   // 16 x 15 = 240
+        let b = try await MenuBuilder(model: ScriptedModel([menuJSON([bundleJSON("Short reads", ids)])])).build(candidates: items)
+        XCTAssertEqual(b.first?.totalMinutes, 240)
+    }
+    func testSummaryReachesPromptViaIndex() throws {
+        let index = try LibraryIndex()
+        var item = Item(id: "s1", type: .article, title: "Memory", wordCount: 2300, tags: ["machine-learning"])
+        item.summary = "How agents keep state across sessions."
+        try index.upsert(path: "s1.md", document: ItemDocument(item: item, body: "b"), modified: Date())
+        let c = MenuCandidate.eligible(from: try index.list().map(\.item))
+        XCTAssertEqual(c.first?.summary, "How agents keep state across sessions.")
+        XCTAssertTrue(MenuPrompt.user(candidates: c, recentTopics: []).contains("| 10 | How agents keep state across sessions."))
     }
     func testAnthropicModelRequestShape() async throws {
         let seen = Box<[String: Any]>()
@@ -138,6 +169,10 @@ final class BuilderTests: XCTestCase {
         let out = try await AnthropicMenuModel(keys: MemKeys(), transport: t).complete(system: "s", user: "u")
         XCTAssertEqual(out, "ok")
         XCTAssertEqual(seen.value?["model"] as? String, "claude-sonnet-5-5")
+        XCTAssertEqual(seen.value?["max_tokens"] as? Int, 16000)
+        let config = seen.value?["output_config"] as? [String: Any]
+        XCTAssertEqual(config?["effort"] as? String, "medium")
+        XCTAssertEqual((config?["format"] as? [String: Any])?["type"] as? String, "json_schema")
     }
 }
 
@@ -154,11 +189,11 @@ final class ServiceTests: XCTestCase {
     }
     override func tearDown() { try? FileManager.default.removeItem(at: tmp) }
 
-    /// 24 items with id c00..., 60 min each (durationMinutes), plus one done item that must not be offered.
+    /// 24 items with id c00..., 45 min each (durationMinutes), plus one done item that must not be offered.
     private func makeIndex() throws -> LibraryIndex {
         let index = try LibraryIndex()
         for c in candidates() {
-            let item = Item(id: c.id, type: .youtube, title: c.title, durationMinutes: 60)
+            let item = Item(id: c.id, type: .youtube, title: c.title, durationMinutes: 45)
             try index.upsert(path: "\(c.id).md", document: ItemDocument(item: item, body: "b"), modified: Date())
         }
         try index.upsert(path: "done.md", document: ItemDocument(item: Item(id: "done", type: .youtube, title: "d", durationMinutes: 60, status: .done, progress: 1), body: ""), modified: Date())
@@ -189,7 +224,7 @@ final class ServiceTests: XCTestCase {
 
         // Marking items done advances progress.
         for id in ["c05", "c06"] {
-            let item = Item(id: id, type: .youtube, title: "T", durationMinutes: 60, status: .done, progress: 1)
+            let item = Item(id: id, type: .youtube, title: "T", durationMinutes: 45, status: .done, progress: 1)
             try index.upsert(path: "\(id).md", document: ItemDocument(item: item, body: ""), modified: Date())
         }
         let p = try XCTUnwrap(svc2.progress())

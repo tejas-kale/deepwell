@@ -39,34 +39,19 @@ final class MenuController {
         Task {
             do { try await service.rebuild() }
             catch TaggingError.missingAPIKey { errorMessage = "Set your Anthropic API key in Settings first." }
-            catch MenuError.notEnoughItems(let n) { errorMessage = "Only \(n) unread items with a known length; need at least \(MenuBuilder.minimumEligible)." }
-            catch { errorMessage = "Could not build the menu: \(error)" }
+            catch MenuError.notEnoughItems(let n, let minutes) {
+                errorMessage = "Not enough to build a bundle yet: \(n) unread item\(n == 1 ? "" : "s") with a known length, "
+                    + "\(formatMinutes(minutes)) in total. A bundle needs at least \(MenuSizing.minItems) items and "
+                    + "\(formatMinutes(MenuSizing.minBundleMinutes))."
+            }
+            catch MenuError.invalidModelOutput(let why) {
+                errorMessage = "The model's answer couldn't be used, twice. Try Rebuild again.\n\nDetails: \(why)"
+            }
+            catch TaggingError.api(let status, let message) { errorMessage = "Anthropic API error \(status): \(message)" }
+            catch TaggingError.network(let message) { errorMessage = "Network problem: \(message)" }
+            catch { errorMessage = "Could not build the menu: \(error.localizedDescription)" }
             isBuilding = false
             refresh()
-        }
-    }
-
-    private var scheduler: MenuScheduler?
-    private var scheduleTask: Task<Void, Never>?
-
-    /// Starts the Monday 07:00 schedule while the app runs; also catches up a missed Monday right away.
-    /// Re-checks at the next slot, and at least hourly so a wake from sleep is noticed.
-    func startSchedule() {
-        guard let service, scheduleTask == nil else { return }
-        let s = MenuScheduler(service: service, store: UserDefaultsLastRunStore(), notifier: UserNotificationMenuNotifier.shared)
-        scheduler = s
-        scheduleTask = Task { [weak self] in
-            while !Task.isCancelled {
-                if self?.isBuilding == false {
-                    self?.isBuilding = true
-                    let outcome = await s.runIfDue()
-                    self?.isBuilding = false
-                    if case .failed(let why) = outcome { self?.errorMessage = "Scheduled menu build failed: \(why)" }
-                    self?.refresh()
-                }
-                let wait = min(max(s.nextFire().timeIntervalSinceNow, 1), 3600)
-                try? await Task.sleep(for: .seconds(wait))
-            }
         }
     }
 

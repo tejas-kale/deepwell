@@ -11,6 +11,13 @@
 
   // Readability mutates the document it is given, so always work on a clone.
   const clone = doc.cloneNode(true);
+  // Readability drops elements whose class or id looks like page chrome ("header", "social", ...). Substack marks
+  // every section heading class="header-anchor-post", so all headings vanished. Headings are never chrome
+  // inside an article; clear those attributes so they survive.
+  clone.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((h) => {
+    h.removeAttribute("class");
+    h.removeAttribute("id");
+  });
   const article = new Readability(clone, { keepClasses: false }).parse();
   if (!article || !article.content) return null;
 
@@ -45,6 +52,41 @@
       return "\n\n" + rows.map((r) => "- " + r).join("\n") + "\n\n";
     },
   });
+  // srcset is "url 424w, url 848w". URLs may themselves contain commas (Substack's image CDN does:
+  // ".../fetch/$s_!x!,w_424,c_limit,f_webp/..."), so split on whitespace, not commas: a token that is a width or
+  // density descriptor belongs to the URL before it.
+  const parseSrcset = (srcset) => {
+    const out = [];
+    for (const tok of srcset.trim().split(/\s+/)) {
+      const d = tok.match(/^(\d+(?:\.\d+)?)([wx]),?$/);
+      if (d && out.length) {
+        out[out.length - 1].width = d[2] === "w" ? parseFloat(d[1]) : parseFloat(d[1]) * 1000;
+      } else if (tok && tok !== ",") {
+        out.push({ url: tok.replace(/,$/, ""), width: 0 });
+      }
+    }
+    return out;
+  };
+  const looksLikeImage = (u) =>
+    /\/image\/fetch\/|substackcdn\.com\/image/i.test(u) || /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|$)/i.test(u);
+
+  // An image wrapped in a link to its full-size file (Substack does this for every image) would come out as
+  // "[\n\n![](src)\n\n](href)", which renders as a stray "[" and a raw URL. Emit just the image instead.
+  td.addRule("linkedImage", {
+    filter: (node) =>
+      node.nodeName === "A" &&
+      node.querySelector("img") &&
+      node.textContent.trim() === "",
+    replacement: (content, node) => {
+      const href = node.getAttribute("href") || "";
+      const m = content.match(/!\[([^\]]*)\]\(([^)\s]+)\)/);
+      if (!m) return content;
+      let abs = href;
+      try { abs = new URL(href, url).href; } catch (e) {}
+      return "\n\n![" + m[1] + "](" + (looksLikeImage(abs) ? abs : m[2]) + ")\n\n";
+    },
+  });
+
   // Lazy-loaded images (data-src, srcset-only, <picture>) have no usable src after Readability; recover one so the
   // reader can show the picture. Tiny/tracking placeholders (data: URIs, 1px gifs) are dropped.
   td.addRule("realImage", {
@@ -54,9 +96,9 @@
         const cands = [node.getAttribute("src"), node.getAttribute("data-src"), node.getAttribute("data-original")];
         const srcset = node.getAttribute("srcset") || node.getAttribute("data-srcset");
         if (srcset) {
-          const parts = srcset.split(",").map((s) => s.trim().split(/\s+/)).filter((p) => p[0]);
-          parts.sort((a, b) => parseInt(b[1] || "0", 10) - parseInt(a[1] || "0", 10));   // widest first
-          if (parts[0]) cands.unshift(parts[0][0]);
+          const parts = parseSrcset(srcset);
+          parts.sort((a, b) => b.width - a.width);   // widest first
+          if (parts[0]) cands.unshift(parts[0].url);
         }
         return cands.find((c) => c && !c.startsWith("data:"));
       };

@@ -5,6 +5,8 @@ public struct TagResult: Equatable, Sendable {
     public var tags: [String]
     /// Subset of `tags` not in the vocabulary before this call.
     public var newTags: [String]
+    /// One-sentence "what it is about"; "" when the model gave none.
+    public var summary: String = ""
 }
 
 /// Turns model suggestions into a clean tag list, reusing the existing vocabulary.
@@ -13,9 +15,11 @@ public struct Tagger: Sendable {
     let model: TaggingModel
     public init(model: TaggingModel) { self.model = model }
 
-    public func tag(title: String, text: String, vocabulary: [String]) async throws -> TagResult {
-        let raw = try await model.suggestTags(title: title, text: text, vocabulary: vocabulary)
-        return try Self.resolve(raw, vocabulary: vocabulary)
+    public func tag(title: String, text: String, vocabulary: [TagUsage], librarySize: Int) async throws -> TagResult {
+        let s = try await model.suggest(title: title, text: text, vocabulary: vocabulary, librarySize: librarySize)
+        var r = try Self.resolve(s.tags, vocabulary: vocabulary.map(\.name))
+        r.summary = s.summary
+        return r
     }
 
     /// Canonical comparison form: lowercase, runs of space/underscore/hyphen become one hyphen.

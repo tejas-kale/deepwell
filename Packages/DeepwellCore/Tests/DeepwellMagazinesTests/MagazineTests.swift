@@ -302,7 +302,11 @@ final class ImportTests: XCTestCase {
         let access = DirAccess(url: lib)
         let mag = MagazineService(library: access, model: StubSplitter(.success([ArticleSpan(title: "Ocean Farms", start: 3, end: 4)])), keys: keys)
         _ = await mag.processPending()
-        struct Tags: TaggingModel { func suggestTags(title: String, text: String, vocabulary: [String]) async throws -> [String] { ["Aquaculture"] } }
+        struct Tags: TaggingModel {
+            func suggest(title: String, text: String, vocabulary: [TagUsage], librarySize: Int) async throws -> TagSuggestion {
+                TagSuggestion(tags: ["Aquaculture"], summary: "Fish farming.")
+            }
+        }
         let tagging = TaggingService(library: access, model: Tags(), keys: keys)
         let r = await tagging.processPending()
         XCTAssertEqual(r.tagged.count, 1)

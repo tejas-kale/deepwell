@@ -31,7 +31,7 @@ struct FirstLaunchView: View {
                 .multilineTextAlignment(.center)
             Button("Choose Library Folder…") { model.chooseFolder() }
                 .keyboardShortcut(.defaultAction)
-            if let msg = model.errorMessage { Text(msg).foregroundStyle(.red) }
+            if let msg = model.errorMessage { Text(msg).foregroundStyle(Ayu.red) }
         }
         .padding(32)
     }

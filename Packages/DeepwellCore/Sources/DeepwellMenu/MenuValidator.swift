@@ -1,10 +1,10 @@
 import Foundation
 
 /// Strict validation of the model's JSON. Policy for out-of-range output:
-///  - REPAIR what is unambiguous: unknown ids and ids already used earlier are dropped; a bundle with more than
-///    7 items is cut to its first 7 (they are ordered, so the deepest go).
-///  - DROP any bundle that after repair has fewer than 5 items or a total outside 4h..6h, and any with no topic.
-///  - Keep at most 5 bundles (first ones). If fewer than 3 survive the result is invalid with `problems`, and
+///  - REPAIR what is unambiguous: unknown ids and ids already used earlier are dropped; a bundle over 4 hours
+///    loses items from the end until it fits (they are ordered introductory to deeper, so the deepest go).
+///  - DROP any bundle that after repair has fewer than 3 items or under 2.5 hours, and any with no topic.
+///  - Keep at most 5 bundles (first ones). If none survive the result is invalid with `problems`, and
 ///    `MenuBuilder` retries once, passing the problems back to the model; then it throws.
 /// Minutes always come from our data, never from the model.
 public struct ValidationResult: Equatable, Sendable {
@@ -18,7 +18,7 @@ public enum MenuValidator {
         guard let open = raw.firstIndex(of: "{"), let close = raw.lastIndex(of: "}"), open < close,
               let obj = (try? JSONSerialization.jsonObject(with: Data(raw[open...close].utf8))) as? [String: Any],
               let rawBundles = obj["bundles"] as? [[String: Any]] else {
-            throw MenuError.invalidModelOutput("not a JSON object with a \"bundles\" array")
+            throw MenuError.invalidModelOutput("reply was not a JSON object with a \"bundles\" array: \(excerpt(raw))")
         }
         let known = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var used = Set<String>()
@@ -42,25 +42,31 @@ public enum MenuValidator {
                 let reason = (it["reason"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 entries.append(MenuEntry(itemID: id, title: c.title, minutes: c.minutes, reason: reason))
             }
-            if entries.count > MenuSizing.itemCount.upperBound {
-                entries = Array(entries.prefix(MenuSizing.itemCount.upperBound))
-                seen = Set(entries.map(\.itemID))
+            var total = entries.reduce(0) { $0 + $1.minutes }
+            if total > MenuSizing.maxBundleMinutes {
+                while total > MenuSizing.maxBundleMinutes, let last = entries.popLast() { total -= last.minutes }
+                problems.append("\(name): over \(MenuSizing.maxBundleMinutes) min; deepest items cut to \(total) min")
             }
-            let bundle = MenuBundle(topic: topic, entries: entries)
-            if !MenuSizing.itemCount.contains(entries.count) {
-                problems.append("\(name): \(entries.count) valid items, need 5-7; dropped"); continue
+            if entries.count < MenuSizing.minItems {
+                problems.append("\(name): \(entries.count) valid items, need at least \(MenuSizing.minItems); dropped"); continue
             }
-            let total = bundle.totalMinutes
-            if !(MenuSizing.minBundleMinutes...MenuSizing.maxBundleMinutes).contains(total) {
-                problems.append("\(name): totals \(total) min, need 240-360; dropped"); continue
+            if total < MenuSizing.minBundleMinutes {
+                problems.append("\(name): totals \(total) min, need \(MenuSizing.minBundleMinutes)-\(MenuSizing.maxBundleMinutes); dropped"); continue
             }
             if out.count >= MenuSizing.bundleCount.upperBound { break }
-            used.formUnion(seen)
-            out.append(bundle)
+            used.formUnion(entries.map(\.itemID))
+            out.append(MenuBundle(topic: topic, entries: entries))
         }
         if out.count < MenuSizing.bundleCount.lowerBound {
-            problems.append("only \(out.count) usable bundles, need 3-5")
+            problems.append("no usable bundles")
         }
         return ValidationResult(bundles: out, problems: problems)
+    }
+
+    /// The start of an unusable reply, one line, for error messages.
+    static func excerpt(_ raw: String, limit: Int = 160) -> String {
+        let flat = raw.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        if flat.isEmpty { return "(empty reply)" }
+        return "\"" + (flat.count > limit ? flat.prefix(limit) + "…" : flat) + "\""
     }
 }

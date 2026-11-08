@@ -110,3 +110,14 @@ link is the fallback) and timestamp seeking, and SwiftUI rendering of `YouTubeTr
   images/tables render as plain text).
 - Not verified: the SwiftUI views were compiled but never run; real iCloud eviction/download (tested with a fake
   downloader); scroll-position restore is approximate.
+
+## Extraction fixes (Nov 2026)
+
+- **Headings:** Readability drops elements whose class looks like page chrome ("header", ...). Substack marks every
+  section heading `class="header-anchor-post"`, so all headings vanished. Headings now have class/id cleared first.
+- **Images:** srcset is parsed by whitespace, not commas (Substack image URLs contain commas, which produced
+  `site/p/fl_progressive:steep/...` URLs), and an image wrapped in a link to its full-size file becomes a single
+  `![alt](url)` instead of a multi-line `[ ![..](..) ](..)`.
+- Articles saved before these fixes are repaired when read (`DeepwellModel/MarkdownRepair.swift`: decodes the split
+  Substack URLs, unwraps linked images, drops leftover bracket lines, un-escapes literal Markdown images). Missing
+  headings cannot be recovered that way: re-capture the article.

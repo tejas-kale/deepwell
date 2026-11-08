@@ -1,8 +1,13 @@
 import SwiftUI
+import DeepwellModel
 
-/// Small block-level Markdown renderer (headings, paragraphs, lists, quotes, code fences, rules, images as links).
+/// Small block-level Markdown renderer (headings, paragraphs, lists, quotes, code fences, rules, images).
 /// Inline styling (bold, italic, code, links) comes from AttributedString's Markdown parser.
+/// Lists and quotes use the same serif body type as paragraphs; consecutive list items sit close together.
 struct MarkdownBody: View {
+    static let bodyFont = Font.system(size: 17, design: .serif)
+    static let bodyLineSpacing: CGFloat = 7
+
     let markdown: String
 
     enum Block: Equatable {
@@ -17,13 +22,57 @@ struct MarkdownBody: View {
         case caption(String)
     }
 
+    /// A run of blocks laid out together: list items and quote lines get tight spacing inside the group.
+    private struct Run: Identifiable { let id: Int; let blocks: [Block]; let tight: Bool }
+
+    private static func groups(_ blocks: [Block]) -> [Run] {
+        var out: [Run] = []
+        var run: [Block] = []
+        var runKind: Int?   // 0 list, 1 quote
+        func flush() { if !run.isEmpty { out.append(Run(id: out.count, blocks: run, tight: true)); run = [] } }
+        for b in blocks {
+            let kind: Int? = switch b { case .bullet, .numbered: 0; case .quote: 1; default: nil }
+            if let kind {
+                if kind != runKind { flush() }
+                runKind = kind; run.append(b)
+            } else {
+                flush(); runKind = nil
+                out.append(Run(id: out.count, blocks: [b], tight: false))
+            }
+        }
+        flush()
+        return out
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(Array(ArticleCleaner.clean(Self.parse(markdown)).enumerated()), id: \.offset) { _, block in
-                view(for: block)
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(Self.groups(ArticleCleaner.clean(Self.parse(MarkdownRepair.repair(markdown))))) { g in
+                if g.tight, case .quote = g.blocks[0] {
+                    quote(g.blocks)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(g.blocks.enumerated()), id: \.offset) { _, block in view(for: block) }
+                    }
+                }
             }
         }
         .textSelection(.enabled)
+    }
+
+    /// Consecutive quote lines form one quote: body-size serif italic beside an accent bar.
+    private func quote(_ blocks: [Block]) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 1.5).fill(Ayu.accent.opacity(0.7)).frame(width: 3)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
+                    if case .quote(let text) = b {
+                        inline(text).font(Self.bodyFont.italic()).lineSpacing(Self.bodyLineSpacing).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -32,16 +81,22 @@ struct MarkdownBody: View {
         case .heading(let level, let text):
             inline(text).font(.system(level == 1 ? .title : level == 2 ? .title2 : .title3, design: .serif).bold()).padding(.top, 14)
         case .paragraph(let text):
-            inline(text).font(.system(size: 17, design: .serif)).lineSpacing(7)
+            inline(text).font(Self.bodyFont).lineSpacing(Self.bodyLineSpacing)
         case .bullet(let text, let indent):
-            HStack(alignment: .firstTextBaseline, spacing: 6) { Text("•"); inline(text) }.padding(.leading, CGFloat(indent) * 16 + 4)
-        case .numbered(let n, let text):
-            HStack(alignment: .firstTextBaseline, spacing: 6) { Text(n).monospacedDigit(); inline(text) }.padding(.leading, 4)
-        case .quote(let text):
-            HStack(spacing: 8) {
-                Rectangle().fill(.secondary.opacity(0.5)).frame(width: 3)
-                inline(text).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(indent == 0 ? "•" : "◦").foregroundStyle(.secondary)
+                inline(text).lineSpacing(Self.bodyLineSpacing)
             }
+            .font(Self.bodyFont)
+            .padding(.leading, CGFloat(indent) * 22 + 6)
+        case .numbered(let n, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(n).monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 22, alignment: .trailing)
+                inline(text).lineSpacing(Self.bodyLineSpacing)
+            }
+            .font(Self.bodyFont)
+        case .quote:
+            quote([block])
         case .code(let text):
             Text(text).font(.system(.callout, design: .monospaced)).padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,7 +107,12 @@ struct MarkdownBody: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let img): img.resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 6))
-                case .failure: Label(alt.isEmpty ? "Image unavailable" : alt, systemImage: "photo").font(.caption).foregroundStyle(.secondary)
+                case .failure:
+                    // Some hosts refuse hot-linked images; offer the image itself instead of a dead end.
+                    Link(destination: url) {
+                        Label(alt.isEmpty ? "Image unavailable. Open image" : "\(alt) (open image)", systemImage: "photo")
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 default: ProgressView().frame(maxWidth: .infinity, minHeight: 120)
                 }
             }
