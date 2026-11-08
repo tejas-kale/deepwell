@@ -24,6 +24,8 @@ struct ReaderView: View {
                 Text(msg).foregroundStyle(.red).padding()
             case .ready(let doc) where doc.item.type == .youtube:
                 YouTubeTranscriptView(document: doc)
+            case .ready(let doc) where doc.item.type == .podcast:
+                PodcastPlayerView(document: doc)
             case .ready(let doc):
                 ScrollProgressView(initialProgress: doc.item.progress) { p in progressChanged(p) } content: {
                     VStack(alignment: .leading, spacing: 12) {

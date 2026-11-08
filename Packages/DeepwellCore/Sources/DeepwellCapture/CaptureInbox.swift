@@ -41,6 +41,7 @@ public struct CaptureInbox: Sendable {
         var result = DrainResult()
         let fm = FileManager.default
         for file in pending() {
+            if Self.isLinkFile(file) { continue }   // resolved by the app (see pendingLinks)
             guard let payload = (try? Data(contentsOf: file)).flatMap({ try? JSONDecoder().decode(CapturePayload.self, from: $0) }),
                   (try? payload.validated()) != nil else {
                 let dir = directory.appendingPathComponent("rejected", isDirectory: true)
@@ -60,5 +61,29 @@ public struct CaptureInbox: Sendable {
             }
         }
         return result
+    }
+}
+
+extension CaptureInbox {
+    /// Links shared from the Share Extension, waiting to be resolved over the network by the app.
+    public func pendingLinks() -> [(file: URL, payload: CapturePayload)] {
+        pending().compactMap { file in
+            guard let p = (try? Data(contentsOf: file)).flatMap({ try? JSONDecoder().decode(CapturePayload.self, from: $0) }),
+                  p.isLink else { return nil }
+            return (file, p)
+        }
+    }
+
+    /// Removes a handled link, or parks it in `unsupported/` so the user's share is not silently lost.
+    public func finishLink(_ file: URL, handled: Bool) {
+        let fm = FileManager.default
+        guard !handled else { try? fm.removeItem(at: file); return }
+        let dir = directory.appendingPathComponent("unsupported", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fm.moveItem(at: file, to: dir.appendingPathComponent(file.lastPathComponent))
+    }
+
+    static func isLinkFile(_ file: URL) -> Bool {
+        (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(CapturePayload.self, from: $0) }?.isLink ?? false
     }
 }

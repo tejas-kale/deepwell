@@ -4,10 +4,10 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** built, unverified in UI (see docs/podcasts.md)
 
-- [ ] Share Extension appears for URLs from Podcasts, Overcast, YouTube and Safari
-- [ ] Apple Podcasts and Overcast episode links resolve to an audio URL, with tests using recorded responses
-- [ ] Saved `type: podcast` items include title, show (author), duration and source URL
-- [ ] YouTube links shared from the app follow the ticket 05 path
-- [ ] Reader plays the episode audio next to the transcript
+- [~] Share Extension appears for URLs from Podcasts, Overcast, YouTube and Safari (builds and embeds; never launched)
+- [~] Apple Podcasts and Overcast episode links resolve to an audio URL, with tests (hand-written fixtures, not recorded)
+- [x] Saved `type: podcast` items include title, show (author), duration and source URL
+- [~] YouTube links shared from the app follow the ticket 05 no-captions path (no caption fetch in Swift)
+- [~] Reader plays the episode audio next to the transcript
