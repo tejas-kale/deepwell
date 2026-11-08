@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Extension detects YouTube video pages and saves `type: youtube` with `duration_minutes`
-- [ ] Published captions (preferring manual over auto-generated) become the Markdown body
-- [ ] Videos without captions are saved with a "needs transcript" marker for ticket 06
-- [ ] Reader shows the video plus the transcript
+- [x] Extension detects YouTube video pages and saves `type: youtube` with `duration_minutes`
+- [x] Published captions (preferring manual over auto-generated) become the Markdown body
+- [x] Videos without captions are saved with a "needs transcript" marker for ticket 06
+- [ ] Reader shows the video plus the transcript (view built: Apps/Deepwell/YouTubeTranscriptView.swift, compiles, NOT wired into the reader or run; see docs/safari-extension.md)
