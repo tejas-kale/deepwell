@@ -10,5 +10,6 @@ struct DeepwellApp: App {
                 .frame(minWidth: 480, minHeight: 320)
                 .onOpenURL { _ in model.drainInbox() }   // deepwell://inbox wake-up from the extension
         }
+        Settings { SettingsView(tagging: model.tagging) }
     }
 }

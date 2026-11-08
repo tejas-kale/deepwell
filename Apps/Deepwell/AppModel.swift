@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import DeepwellLibrary
 import DeepwellCapture
+import DeepwellTagging
 
 @Observable
 @MainActor
@@ -16,9 +17,11 @@ final class AppModel {
     private let folderStore = LibraryFolderStore(storage: UserDefaultsBookmarkStorage())
     private let inbox = CaptureInbox(directory: SharedConfig.inboxDirectory)
     private var timer: Timer?
+    let tagging: TaggingController
 
     init() {
         phase = .needsFolder
+        tagging = TaggingController(library: folderStore)
         refreshPhase()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.drainInbox() }
@@ -55,6 +58,6 @@ final class AppModel {
     func drainInbox() {
         guard case .ready = phase else { return }
         let result = inbox.drain(into: folderStore)
-        if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 } }
+        if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 }; tagging.kick() }
     }
 }
