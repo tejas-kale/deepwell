@@ -53,3 +53,15 @@ xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -derivedDataPath build/d
 
 Verified: Swift unit tests, node extraction tests, `xcodebuild build` (unsigned). Not verified: anything running in
 Safari (see the UNVERIFIED note in spec.md Platform -> Risk), the app's folder picker UI, app-group signing.
+
+## Library and reader (ticket 02)
+
+- `DeepwellIndex` target: `LibraryIndex` (SQLite + FTS5 in `~/Library/Application Support/Deepwell/index.sqlite`,
+  schema-versioned cache, dropped and rebuilt on version change), `LibrarySync` (incremental by mtime; `rebuild()`
+  re-reads everything), `FolderWatcher` (FSEvents), `ICloudPlaceholder` (`.name.md.icloud` stubs: sync requests
+  download, `ensureLocal` downloads and waits before the reader opens a file), `ItemFileUpdater`/`ReadingState`
+  (progress/status write-back; progress only moves forward, >= 97% = done).
+- App glue: `LibraryModel`, `LibraryView`, `ReaderView`, `MarkdownBody` (small block renderer, not full CommonMark;
+  images/tables render as plain text).
+- Not verified: the SwiftUI views were compiled but never run; real iCloud eviction/download (tested with a fake
+  downloader); scroll-position restore is approximate.

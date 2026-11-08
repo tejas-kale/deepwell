@@ -29,6 +29,8 @@ targets:
         product: DeepwellLibrary
       - package: DeepwellCore
         product: DeepwellCapture
+      - package: DeepwellCore
+        product: DeepwellIndex
       - target: DeepwellSafariExtension
         embed: true
     settings:

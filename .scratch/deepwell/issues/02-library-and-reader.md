@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Library lists items (title, type, captured date, status) and updates when files are added or changed on disk
-- [ ] Reader renders Markdown; scroll progress and status (unread/reading/done) are written back to frontmatter
-- [ ] Full-text search over title and body
-- [ ] Deleting the index and relaunching rebuilds it from the files with the same result
-- [ ] Evicted iCloud files (`.icloud` placeholders) are downloaded on demand before opening
+- [x] Library lists items (title, type, captured date, status) and updates when files are added or changed on disk
+- [x] Reader renders Markdown; scroll progress and status (unread/reading/done) are written back to frontmatter
+- [x] Full-text search over title and body
+- [x] Deleting the index and relaunching rebuilds it from the files with the same result
+- [x] Evicted iCloud files (`.icloud` placeholders) are downloaded on demand before opening

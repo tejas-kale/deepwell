@@ -8,19 +8,7 @@ struct RootView: View {
         case .needsFolder:
             FirstLaunchView(model: model)
         case .ready(let folder):
-            VStack(alignment: .leading, spacing: 12) {
-                Label(folder.path, systemImage: "folder").font(.callout).foregroundStyle(.secondary)
-                Text("Saved this session").font(.headline)
-                if model.recentSaves.isEmpty {
-                    Text("Press the Deepwell button in Safari to save a page.").foregroundStyle(.secondary)
-                } else {
-                    List(model.recentSaves, id: \.self) { url in
-                        Text(url.lastPathComponent)
-                            .onTapGesture { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                    }
-                }
-            }
-            .padding()
+            LibraryView(folder: folder).id(folder)
         }
     }
 }
