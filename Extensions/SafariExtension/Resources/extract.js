@@ -45,6 +45,29 @@
       return "\n\n" + rows.map((r) => "- " + r).join("\n") + "\n\n";
     },
   });
+  // Lazy-loaded images (data-src, srcset-only, <picture>) have no usable src after Readability; recover one so the
+  // reader can show the picture. Tiny/tracking placeholders (data: URIs, 1px gifs) are dropped.
+  td.addRule("realImage", {
+    filter: "img",
+    replacement: (_c, node) => {
+      const pick = () => {
+        const cands = [node.getAttribute("src"), node.getAttribute("data-src"), node.getAttribute("data-original")];
+        const srcset = node.getAttribute("srcset") || node.getAttribute("data-srcset");
+        if (srcset) {
+          const parts = srcset.split(",").map((s) => s.trim().split(/\s+/)).filter((p) => p[0]);
+          parts.sort((a, b) => parseInt(b[1] || "0", 10) - parseInt(a[1] || "0", 10));   // widest first
+          if (parts[0]) cands.unshift(parts[0][0]);
+        }
+        return cands.find((c) => c && !c.startsWith("data:"));
+      };
+      const src = pick();
+      if (!src) return "";
+      let abs = src;
+      try { abs = new URL(src, url).href; } catch (e) {}
+      const alt = (node.getAttribute("alt") || "").replace(/[\[\]\n]/g, " ").trim();
+      return "\n\n![" + alt + "](" + abs + ")\n\n";
+    },
+  });
   td.remove(["script", "style", "noscript", "iframe", "form", "button"]);
 
   let markdown = td.turndown(article.content);

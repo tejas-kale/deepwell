@@ -13,11 +13,13 @@ struct MarkdownBody: View {
         case quote(String)
         case code(String)
         case rule
+        case image(alt: String, url: URL)
+        case caption(String)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(Self.parse(markdown).enumerated()), id: \.offset) { _, block in
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(Array(ArticleCleaner.clean(Self.parse(markdown)).enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
         }
@@ -28,9 +30,9 @@ struct MarkdownBody: View {
     private func view(for block: Block) -> some View {
         switch block {
         case .heading(let level, let text):
-            inline(text).font(level == 1 ? .title.bold() : level == 2 ? .title2.bold() : .headline).padding(.top, 6)
+            inline(text).font(.system(level == 1 ? .title : level == 2 ? .title2 : .title3, design: .serif).bold()).padding(.top, 14)
         case .paragraph(let text):
-            inline(text).lineSpacing(3)
+            inline(text).font(.system(size: 17, design: .serif)).lineSpacing(7)
         case .bullet(let text, let indent):
             HStack(alignment: .firstTextBaseline, spacing: 6) { Text("•"); inline(text) }.padding(.leading, CGFloat(indent) * 16 + 4)
         case .numbered(let n, let text):
@@ -46,6 +48,18 @@ struct MarkdownBody: View {
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         case .rule:
             Divider()
+        case .image(let alt, let url):
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img): img.resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 6))
+                case .failure: Label(alt.isEmpty ? "Image unavailable" : alt, systemImage: "photo").font(.caption).foregroundStyle(.secondary)
+                default: ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel(alt)
+        case .caption(let text):
+            inline(text).font(.caption).foregroundStyle(.secondary).padding(.top, -8)
         }
     }
 
@@ -71,6 +85,9 @@ struct MarkdownBody: View {
             if raw.hasPrefix("```") { flush(); code = []; continue }
             if line.isEmpty { flush(); continue }
             if let h = heading(line) { flush(); blocks.append(h); continue }
+            if let m = line.firstMatch(of: /^!\[([^\]]*)\]\(([^)\s]+)[^)]*\)$/), let u = URL(string: String(m.2)) {
+                flush(); blocks.append(.image(alt: String(m.1), url: u)); continue
+            }
             if line.allSatisfy({ $0 == "-" || $0 == "*" || $0 == "_" }), line.count >= 3 { flush(); blocks.append(.rule); continue }
             if line.hasPrefix(">") { flush(); blocks.append(.quote(String(line.dropFirst()).trimmingCharacters(in: .whitespaces))); continue }
             if let m = line.firstMatch(of: /^[-*+]\s+(.*)$/) {

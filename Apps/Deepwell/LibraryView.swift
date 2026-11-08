@@ -9,7 +9,12 @@ struct LibraryView: View {
     @State private var menu: MenuController?
     @State private var showTags = false
 
-    init(folder: URL) { _model = State(initialValue: LibraryModel(folder: folder)) }
+    let tagging: TaggingController
+
+    init(folder: URL, tagging: TaggingController) {
+        _model = State(initialValue: LibraryModel(folder: folder))
+        self.tagging = tagging
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -23,7 +28,7 @@ struct LibraryView: View {
                                            description: Text(model.searchText.isEmpty ? "Press the Deepwell button in Safari to save a page." : ""))
                 }
             }
-            .navigationSplitViewColumnWidth(min: 280, ideal: 340)
+            .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 640)
             .searchable(text: $model.searchText, prompt: "Search title and text")
             .toolbar {
                 ToolbarItem {
@@ -77,6 +82,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showTags) { TagsView(model: model) }
         .safeAreaInset(edge: .bottom) {
             if let msg = model.errorMessage { Text(msg).font(.caption).foregroundStyle(.red).padding(4) }
+            else if let s = tagging.lastStatus { Text(s).font(.caption).foregroundStyle(.secondary).padding(4) }
         }
     }
 }
@@ -85,34 +91,49 @@ struct ItemRow: View {
     let entry: IndexedItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Image(systemName: icon).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 10) {
+            typeIcon
+            VStack(alignment: .leading, spacing: 5) {
                 Text(entry.item.title.isEmpty ? "Untitled" : entry.item.title)
                     .fontWeight(entry.item.status == .unread ? .semibold : .regular)
+                    .foregroundStyle(entry.item.status == .done ? .secondary : .primary)
                     .lineLimit(2)
-            }
-            if !entry.item.tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(entry.item.tags, id: \.self) { t in
-                        Text(entry.newTags.contains(t) ? "\(t) • new" : t)
-                            .font(.caption2).padding(.horizontal, 5)
-                            .background(entry.newTags.contains(t) ? Color.orange.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
+                if !entry.item.tags.isEmpty {
+                    FlowLayout(spacing: 4) {
+                        ForEach(entry.item.tags, id: \.self) { t in
+                            let isNew = entry.newTags.contains(t)
+                            Text(isNew ? "\(t) • new" : t)
+                                .font(.caption2).lineLimit(1)
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(isNew ? Color.orange.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
+                        }
                     }
                 }
-            }
-            HStack(spacing: 6) {
-                Text(entry.item.type.rawValue)
-                Text(entry.item.capturedAt, style: .date)
-                Text(entry.item.status.rawValue)
-                if entry.item.status == .reading { ProgressView(value: entry.item.progress).frame(width: 40) }
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            if let snippet = entry.snippet {
-                Text(snippet).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(entry.item.capturedAt, format: .dateTime.day().month(.abbreviated)).fixedSize()
+                    if entry.item.status == .reading { ProgressView(value: entry.item.progress).frame(width: 40) }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                if let snippet = entry.snippet {
+                    Text(snippet).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+    }
+
+    /// The type icon carries the status: a blue dot = unread, a half-filled ring = in progress, a check = done.
+    private var typeIcon: some View {
+        Image(systemName: icon)
+            .font(.title3).foregroundStyle(.secondary).frame(width: 26, height: 26)
+            .overlay(alignment: .topTrailing) {
+                switch entry.item.status {
+                case .unread: Circle().fill(.blue).frame(width: 9, height: 9).offset(x: 3, y: -2)
+                case .reading: Image(systemName: "circle.lefthalf.filled").font(.system(size: 9)).foregroundStyle(.orange).offset(x: 4, y: -3)
+                case .done: Image(systemName: "checkmark.circle.fill").font(.system(size: 10)).foregroundStyle(.green).offset(x: 4, y: -3)
+                }
+            }
+            .help(entry.item.status.rawValue.capitalized)
     }
 
     private var icon: String {
@@ -122,5 +143,30 @@ struct ItemRow: View {
         case .podcast: "waveform"
         case .magazineArticle: "newspaper"
         }
+    }
+}
+
+/// Left-to-right layout that wraps onto new lines, so tags are never truncated to "age…".
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(subviews, width: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let r = arrange(subviews, width: bounds.width)
+        for (i, p) in r.origins.enumerated() { subviews[i].place(at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y), proposal: .unspecified) }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = [], x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, maxX: CGFloat = 0
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width { x = 0; y += rowH + spacing; rowH = 0 }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing; rowH = max(rowH, size.height); maxX = max(maxX, x - spacing)
+        }
+        return (origins, CGSize(width: maxX, height: y + rowH))
     }
 }

@@ -33,13 +33,12 @@ struct ReaderView: View {
                                 startUnit: IssuePosition.read(doc.item)?.start ?? 0)
             case .ready(let doc):
                 ScrollProgressView(initialProgress: doc.item.progress) { p in progressChanged(p) } content: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(doc.item.title).font(.largeTitle.bold())
-                        if let url = doc.item.sourceURL { Link(url.absoluteString, destination: url).font(.caption) }
+                    VStack(alignment: .leading, spacing: 20) {
+                        ArticleHeader(item: doc.item)
                         MarkdownBody(markdown: doc.body)
                     }
-                    .padding(24)
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .padding(.horizontal, 32).padding(.vertical, 40)
+                    .frame(maxWidth: 700, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
             }
@@ -149,6 +148,36 @@ struct ScrollProgressView<Content: View>: View {
                     onProgress(min(max(m.offset / scrollable, 0), 1))
                 }
             }
+        }
+    }
+}
+
+/// Title block: headline, then "Author · site · 12 min read" and an "Open original" link instead of the raw URL.
+struct ArticleHeader: View {
+    let item: Item
+
+    private var site: String? {
+        guard let host = item.sourceURL?.host else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    private var readTime: String? {
+        guard let w = item.wordCount, w > 0 else { return nil }
+        return "\(max(1, Int((Double(w) / 230).rounded()))) min read"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(item.title).font(.system(size: 34, weight: .bold, design: .serif)).lineSpacing(2)
+            HStack(spacing: 6) {
+                Text([item.author, site, readTime].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                if let url = item.sourceURL {
+                    Text("·")
+                    Link("Open original", destination: url)
+                }
+            }
+            .font(.callout).foregroundStyle(.secondary)
+            Divider().padding(.top, 6)
         }
     }
 }
