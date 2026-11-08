@@ -14,7 +14,7 @@ final class LibraryModel {
     var statusFilter: ItemStatus? { didSet { reload() } }
 
     let folder: URL
-    private var index: LibraryIndex?
+    private(set) var index: LibraryIndex?
     private var sync: LibrarySync?
     private var watcher: FolderWatcher?
     private nonisolated(unsafe) var accessing = false

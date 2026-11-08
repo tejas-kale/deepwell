@@ -39,6 +39,8 @@ targets:
         product: DeepwellIndex
       - package: DeepwellCore
         product: DeepwellTranscription
+      - package: DeepwellCore
+        product: DeepwellMenu
       - target: DeepwellSafariExtension
         embed: true
     settings:
