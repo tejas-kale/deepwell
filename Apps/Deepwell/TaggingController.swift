@@ -38,7 +38,7 @@ final class TaggingController {
             let s = await service.processPending()
             await MainActor.run {
                 if s.missingKey { self.lastStatus = "No API key set; items stay untagged." }
-                else if s.failed > 0 { self.lastStatus = "\(s.failed) item(s) could not be tagged; will retry." }
+                else if s.failed > 0 { self.lastStatus = "\(s.failed) item(s) could not be tagged (\(s.lastError ?? "unknown error")); will retry." }
                 else if !s.tagged.isEmpty { self.lastStatus = "Tagged \(s.tagged.count) item(s)." }
             }
         }

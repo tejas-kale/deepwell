@@ -17,6 +17,7 @@ public actor TaggingService {
         public var failed: Int = 0
         public var skippedBackoff: Int = 0
         public var missingKey = false
+        public var lastError: String?         // description of the most recent failure, for display
     }
 
     private let library: LibraryAccessing
@@ -63,11 +64,22 @@ public actor TaggingService {
                 break
             } catch {
                 summary.failed += 1
+                summary.lastError = "\(c.item.title.prefix(40))…: \(Self.describe(error))"
                 let n = (attempts[c.item.id]?.count ?? 0) + 1
                 attempts[c.item.id] = (n, now().addingTimeInterval(min(baseDelay * pow(2, Double(n - 1)), 3600)))
             }
         }
         return summary
+    }
+
+    static func describe(_ error: Error) -> String {
+        switch error {
+        case TaggingError.api(let status, let message): return "API \(status): \(message)"
+        case TaggingError.network(let m): return "network: \(m)"
+        case TaggingError.malformedResponse: return "unreadable model response"
+        case TaggingError.noTags: return "model returned no usable tags"
+        default: return error.localizedDescription
+        }
     }
 
     // MARK: File work (synchronous, runs inside library access)
