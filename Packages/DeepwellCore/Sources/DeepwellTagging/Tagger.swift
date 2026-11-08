@@ -19,7 +19,7 @@ public struct Tagger: Sendable {
     }
 
     /// Canonical comparison form: lowercase, runs of space/underscore/hyphen become one hyphen.
-    static func canonical(_ tag: String) -> String {
+    public static func canonical(_ tag: String) -> String {
         let parts = tag.lowercased().split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" || $0 == "\n" || $0 == "\t" })
         return parts.joined(separator: "-")
     }

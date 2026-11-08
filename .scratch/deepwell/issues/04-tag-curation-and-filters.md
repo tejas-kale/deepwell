@@ -4,9 +4,9 @@
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** done (UI untested, see docs/tag-curation.md)
 
-- [ ] Tag screen lists tags with item counts
-- [ ] Rename, merge (A into B) and delete update every affected file and the index
-- [ ] Library filters by tag, type and status, combinable with search
-- [ ] New-tag flags from ticket 03 are visible and can be cleared
+- [x] Tag screen lists tags with item counts
+- [x] Rename, merge (A into B) and delete update every affected file and the index
+- [x] Library filters by tag, type and status, combinable with search
+- [x] New-tag flags from ticket 03 are visible and can be cleared

@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import DeepwellModel
 import DeepwellIndex
+import DeepwellCuration
 
 /// Glue between the library folder, the SQLite index and the views. All logic lives in DeepwellIndex.
 @Observable
@@ -12,6 +13,8 @@ final class LibraryModel {
     var searchText = "" { didSet { reload() } }
     var typeFilter: ItemType? { didSet { reload() } }
     var statusFilter: ItemStatus? { didSet { reload() } }
+    var tagFilter: String? { didSet { reload() } }
+    private(set) var tagSummaries: [TagSummary] = []
 
     let folder: URL
     private var index: LibraryIndex?
@@ -58,11 +61,23 @@ final class LibraryModel {
         }
     }
 
+    func makeCurator() -> TagCurator? { index.map { TagCurator(root: folder, index: $0) } }
+
+    func reportCuration(_ result: CurationResult) {
+        errorMessage = result.failed.isEmpty ? nil
+            : "\(result.failed.count) file(s) could not be updated: \(result.failed.keys.sorted().joined(separator: ", "))"
+        reload()
+        if let t = tagFilter, !tagSummaries.contains(where: { $0.name == t }) { tagFilter = nil }
+    }
+
+    func reportCurationError(_ message: String) { errorMessage = message; reload() }
+
     func rebuildIndex() { scheduleSync(rebuild: true) }
 
     func reload() {
         guard let index else { return }
-        let filter = ItemFilter(type: typeFilter, status: statusFilter)
+        let filter = ItemFilter(type: typeFilter, status: statusFilter, tag: tagFilter)
+        tagSummaries = (try? index.tagSummaries()) ?? tagSummaries
         do {
             items = searchText.trimmingCharacters(in: .whitespaces).isEmpty
                 ? try index.list(filter: filter)
