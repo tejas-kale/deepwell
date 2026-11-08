@@ -4,9 +4,9 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** built (see docs/menu.md for what is unverified)
 
-- [ ] Menu builds at Monday 07:00 when the app is running
-- [ ] A missed Monday is caught up on next launch, at most once per week
-- [ ] Notification opens the menu
-- [ ] Recently picked topics are passed to the model and appear less often (tested with a stubbed model)
+- [x] Menu builds at Monday 07:00 when the app is running (logic tested with a fake clock; real timer not run)
+- [x] A missed Monday is caught up on next launch, at most once per week
+- [ ] Notification opens the menu (wired, never exercised with a real notification)
+- [x] Recently picked topics are passed to the model and appear less often (tested with a stubbed model)

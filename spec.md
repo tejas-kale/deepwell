@@ -113,7 +113,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** â
 | 07 Share Extension / podcasts | **Not started** | Blocked only on 06, which is done. |
 | 08 Magazine import | **Not started** | Needs 07. |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
-| 10 Monday schedule | **Not started** | Needs 09. `MenuService.recentTopics` is ready for it. |
+| 10 Monday schedule | Built, partly unverified | `docs/menu.md`. Scheduler tested with a fake clock; no real notification, timer run or UI run. Notification click-to-open untested. |
 
 Next steps: build 07, 08 and 10; run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.
