@@ -46,6 +46,30 @@ final class MenuController {
         }
     }
 
+    private var scheduler: MenuScheduler?
+    private var scheduleTask: Task<Void, Never>?
+
+    /// Starts the Monday 07:00 schedule while the app runs; also catches up a missed Monday right away.
+    /// Re-checks at the next slot, and at least hourly so a wake from sleep is noticed.
+    func startSchedule() {
+        guard let service, scheduleTask == nil else { return }
+        let s = MenuScheduler(service: service, store: UserDefaultsLastRunStore(), notifier: UserNotificationMenuNotifier.shared)
+        scheduler = s
+        scheduleTask = Task { [weak self] in
+            while !Task.isCancelled {
+                if self?.isBuilding == false {
+                    self?.isBuilding = true
+                    let outcome = await s.runIfDue()
+                    self?.isBuilding = false
+                    if case .failed(let why) = outcome { self?.errorMessage = "Scheduled menu build failed: \(why)" }
+                    self?.refresh()
+                }
+                let wait = min(max(s.nextFire().timeIntervalSinceNow, 1), 3600)
+                try? await Task.sleep(for: .seconds(wait))
+            }
+        }
+    }
+
     func pick(_ n: Int) {
         do { try service?.pick(bundleIndex: n) } catch { errorMessage = "\(error)" }
         refresh()

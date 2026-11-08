@@ -23,3 +23,33 @@ service instance, progress); `xcodegen` + unsigned `xcodebuild build`.
 Not verified: any real Anthropic call or whether Sonnet follows the sizing instructions often enough (the retry
 may fail on real output; unmeasured), the SwiftUI views (compiled, never run), queue progress refresh while the sheet
 is open (refreshes on open/pick only), Monday 07:00 automatic build (ticket 10), opening items from the queue.
+
+# Monday schedule and notification (ticket 10)
+
+Code: `DeepwellMenu/MenuSchedule.swift` (`MenuSchedule`, `MenuScheduler`, `LastRunStore`, `MenuNotifier`,
+`MenuNotification`). App glue: `MenuController.startSchedule()`, `MenuNotifications.swift` (UserNotifications), and a
+`.task`/`.onReceive` in `LibraryView`.
+
+- **Slot:** Monday 07:00 in the current calendar/time zone. `isDue(now:lastRun:)` is true when the latest slot at or
+  before now is newer than the last recorded run (or nothing was ever recorded). That one rule gives the normal run,
+  the catch-up on the first launch after a missed Monday, and at most one run per slot. Several missed Mondays are
+  caught up once, not replayed.
+- **Runner:** `MenuScheduler.runIfDue()` records the attempt, calls `MenuService.rebuild()` (which passes
+  `recentTopics()`, the last 4 picked topics, to the model prompt), then notifies. The attempt is recorded before the
+  build, so a failure (no API key, fewer than 15 sizable items, network) is not retried until next Monday; the user can
+  press Rebuild menu. A failed run shows an error in the controller and sends no notification.
+- **Last run** lives in `UserDefaults` (`menu.lastScheduledRun`). A manual Rebuild does not count as the weekly run.
+- **App loop:** started when the library index opens. It runs `runIfDue()` immediately (catch-up), then sleeps until the
+  next slot, at most one hour at a time so a wake from sleep re-checks. It only runs while the app is running.
+- **Notification:** "Your weekly menu is ready" / "N topic bundles to choose from: topic, topic, ...". Clicking it posts
+  `.deepwellOpenMenu`, which opens the Weekly Menu sheet.
+
+## Verified vs not (ticket 10)
+Verified: `swift test` with an injected clock, in-memory last-run store, spy notifier and stubbed model (slot
+arithmetic, catch-up, once per week, failure not retried or notified, notification content, recent topics in the next
+prompt); unsigned `xcodebuild build`.
+Not verified: no UI run, no real notification delivered or permission prompt seen, notification click opening the sheet
+(including a cold launch from the notification: the delegate is installed only once the library opens, so it may be
+missed), the real timer firing at 07:00, behaviour across sleep/wake and DST, any real API call, and whether the model
+actually deprioritises recent topics (only that they are in the prompt). The first ever launch counts as due and
+builds immediately if there are enough items.

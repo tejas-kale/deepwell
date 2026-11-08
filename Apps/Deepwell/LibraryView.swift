@@ -60,6 +60,17 @@ struct LibraryView: View {
                 Text("Select an item").foregroundStyle(.secondary)
             }
         }
+        .task(id: model.index != nil) {
+            // Start the Monday schedule as soon as the index is open, not only once the menu sheet was opened.
+            if menu == nil, let i = model.index { menu = MenuController(index: i) }
+            menu?.startSchedule()
+            if UserNotificationMenuNotifier.openRequested { UserNotificationMenuNotifier.openRequested = false; showMenu = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenMenu)) { _ in
+            UserNotificationMenuNotifier.openRequested = false
+            menu?.refresh()
+            showMenu = true
+        }
         .sheet(isPresented: $showMenu) {
             if let menu { MenuContainerView(controller: menu) { showMenu = false } }
         }
