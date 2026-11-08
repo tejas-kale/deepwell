@@ -1,7 +1,8 @@
 import Foundation
 import SQLite3
 
-public struct SQLiteError: Error, CustomStringConvertible {
+public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
+    public var errorDescription: String? { description }
     public let message: String
     public var description: String { "SQLite: \(message)" }
 }
@@ -18,6 +19,7 @@ final class SQLiteDB {
             sqlite3_close(db)
             throw SQLiteError(message: msg)
         }
+        sqlite3_busy_timeout(db, 5000)   // wait for a concurrent writer instead of failing at once
     }
 
     deinit { sqlite3_close(db) }
