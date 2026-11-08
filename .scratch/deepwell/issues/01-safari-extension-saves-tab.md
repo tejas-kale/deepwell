@@ -4,11 +4,13 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** in-progress (code complete; blocked on manual Safari verification, see spec.md Platform → Risk)
 
-- [ ] First launch shows a folder picker defaulting to `iCloud Drive/Deepwell`; the choice persists across launches (security-scoped bookmark)
+- [x] First launch shows a folder picker defaulting to `iCloud Drive/Deepwell`; the choice persists across launches (security-scoped bookmark)
 - [ ] Toolbar button and keyboard shortcut both save the current tab, including pages behind a Safari login
-- [ ] Saved file has frontmatter `id, type: article, title, source_url, author, captured_at, word_count, tags: [], status: unread, progress: 0` and a clean Markdown body
+- [x] Saved file has frontmatter `id, type: article, title, source_url, author, captured_at, word_count, tags: [], status: unread, progress: 0` and a clean Markdown body
 - [ ] Saving gives visible confirmation in Safari and never blocks browsing
-- [ ] Extraction unit tests cover at least 3 saved real-world HTML fixtures
+- [x] Extraction unit tests cover at least 3 saved real-world HTML fixtures
 - [ ] Unsigned-extension behaviour across Safari restarts is tested on a free-account build and the result recorded in spec.md (Platform → Risk), with a workaround if one is needed
+
+Notes: the folder-picker UI builds but was not run interactively (bookmark logic is unit-tested). The Safari-dependent boxes (button/shortcut, login pages, visible confirmation, unsigned-extension behaviour) are implemented but UNVERIFIED; see docs/safari-extension.md for the manual test steps.

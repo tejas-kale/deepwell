@@ -24,6 +24,20 @@ of topic bundles so you can go deep on one topic per week.
 - Built with a free Apple ID (personal team), locally signed. No paid developer account yet.
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
   extensions not signed with a paid account. Ticket 1 tests this before anything else gets built.
+- **UNVERIFIED — needs manual test.** Ticket 01 is built but nobody has run it in Safari (the build was done
+  headless; "Allow Unsigned Extensions" cannot be driven from there). No result is claimed. To settle the risk:
+  1. `brew install xcodegen`, then `xcodegen generate`; open `Deepwell.xcodeproj`; in Signing & Capabilities
+     pick your personal team for both targets (or set `DEVELOPMENT_TEAM` in `Config/Local.xcconfig`).
+     If Xcode rejects the app-group entitlement for a personal team, note that: the capture hand-off depends on it.
+  2. Run the `Deepwell` scheme. Choose a library folder (try the default iCloud Drive/Deepwell).
+  3. Safari > Settings > Advanced: tick "Show features for web developers". Develop > Allow Unsigned Extensions
+     (enter password). Safari > Settings > Extensions: enable Deepwell, allow it on all websites.
+  4. Open an article, click the Deepwell toolbar button, then press Ctrl+Shift+S on another. Expect a toast and a
+     new .md file in the library folder (check frontmatter and body). Repeat on a page behind a login.
+  5. Quit Safari (Cmd+Q) and reopen. Record: is the extension still enabled, is "Allow Unsigned Extensions"
+     reset (it is expected to be), and does saving still work after re-ticking it?
+  6. Record the outcome here and, if re-enabling is required each restart, the workaround. Also record whether the
+     keyboard shortcut fires (`_execute_action` -> `action.onClicked` in Safari is assumed, not confirmed).
 
 ## Capture
 

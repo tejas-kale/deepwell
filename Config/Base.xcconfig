@@ -1,0 +1,3 @@
+// Personal-team signing without hardcoding a team ID: copy Local.xcconfig.example to
+// Local.xcconfig (gitignored) and set DEVELOPMENT_TEAM, or pick the team in Xcode's Signing tab.
+#include? "Local.xcconfig"

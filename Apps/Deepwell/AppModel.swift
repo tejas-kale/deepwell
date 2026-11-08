@@ -1,0 +1,60 @@
+import AppKit
+import Foundation
+import Observation
+import DeepwellLibrary
+import DeepwellCapture
+
+@Observable
+@MainActor
+final class AppModel {
+    enum Phase { case needsFolder, ready(URL) }
+
+    private(set) var phase: Phase
+    private(set) var recentSaves: [URL] = []
+    var errorMessage: String?
+
+    private let folderStore = LibraryFolderStore(storage: UserDefaultsBookmarkStorage())
+    private let inbox = CaptureInbox(directory: SharedConfig.inboxDirectory)
+    private var timer: Timer?
+
+    init() {
+        phase = .needsFolder
+        refreshPhase()
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.drainInbox() }
+        }
+        drainInbox()
+    }
+
+    private func refreshPhase() {
+        if case .available(let url) = folderStore.state { phase = .ready(url) } else { phase = .needsFolder }
+    }
+
+    /// Opens a folder picker starting at iCloud Drive/Deepwell (or iCloud Drive if it doesn't exist yet).
+    func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Use as Library"
+        panel.message = "Choose the Deepwell library folder. Default: iCloud Drive/Deepwell."
+        let def = LibraryFolderStore.defaultICloudFolder()
+        let fm = FileManager.default
+        panel.directoryURL = fm.fileExists(atPath: def.path) ? def : def.deletingLastPathComponent()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try folderStore.choose(url)
+            errorMessage = nil
+            refreshPhase()
+            drainInbox()
+        } catch {
+            errorMessage = "Could not use that folder: \(error.localizedDescription)"
+        }
+    }
+
+    func drainInbox() {
+        guard case .ready = phase else { return }
+        let result = inbox.drain(into: folderStore)
+        if !result.saved.isEmpty { recentSaves = (result.saved.reversed() + recentSaves).prefix(20).map { $0 } }
+    }
+}

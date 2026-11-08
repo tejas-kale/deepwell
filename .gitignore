@@ -1,0 +1,11 @@
+.DS_Store
+.venv/
+node_modules/
+.build/
+.swiftpm/
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+Deepwell.xcodeproj/
+Config/Local.xcconfig

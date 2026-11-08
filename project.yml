@@ -1,0 +1,71 @@
+name: Deepwell
+options:
+  bundleIdPrefix: com.tejaskale
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+packages:
+  DeepwellCore:
+    path: Packages/DeepwellCore
+targets:
+  Deepwell:
+    type: application
+    platform: macOS
+    sources:
+      - Apps/Deepwell
+      - Apps/Shared
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellLibrary
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - target: DeepwellSafariExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Apps/Deepwell/Info.plist
+    entitlements:
+      path: Apps/Deepwell/Deepwell.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.deepwell
+  DeepwellSafariExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extensions/SafariExtension/Native
+      - path: Apps/Shared
+      # Flat group => files land directly in appex Contents/Resources, where Safari expects manifest.json.
+      - path: Extensions/SafariExtension/Resources
+        buildPhase: resources
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - sdk: SafariServices.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell.SafariExtension
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Extensions/SafariExtension/Native/Info.plist
+    entitlements:
+      path: Extensions/SafariExtension/Native/SafariExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.deepwell
+        com.apple.security.network.client: false

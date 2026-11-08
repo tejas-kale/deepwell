@@ -1,0 +1,14 @@
+{
+  "name": "deepwell-safari-extension",
+  "private": true,
+  "scripts": {
+    "vendor": "cp node_modules/@mozilla/readability/Readability.js Resources/readability.js && cp node_modules/turndown/dist/turndown.js Resources/turndown.js && cp node_modules/turndown-plugin-gfm/dist/turndown-plugin-gfm.js Resources/turndown-plugin-gfm.js",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^26.0.0",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2"
+  }
+}
