@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "DeepwellTagging", targets: ["DeepwellTagging"]),
         .library(name: "DeepwellYouTube", targets: ["DeepwellYouTube"]),
         .library(name: "DeepwellIndex", targets: ["DeepwellIndex"]),
+        .library(name: "DeepwellMenu", targets: ["DeepwellMenu"]),
     ],
     targets: [
         .target(name: "DeepwellModel"),
@@ -29,6 +30,8 @@ let package = Package(
         .testTarget(name: "DeepwellYouTubeTests", dependencies: ["DeepwellYouTube", "DeepwellModel"]),
         .target(name: "DeepwellIndex", dependencies: ["DeepwellModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .testTarget(name: "DeepwellIndexTests", dependencies: ["DeepwellIndex", "DeepwellLibrary", "DeepwellModel"]),
+        .target(name: "DeepwellMenu", dependencies: ["DeepwellModel", "DeepwellTagging", "DeepwellIndex"]),
+        .testTarget(name: "DeepwellMenuTests", dependencies: ["DeepwellMenu", "DeepwellTagging", "DeepwellIndex", "DeepwellModel"]),
         .testTarget(name: "DeepwellModelTests", dependencies: ["DeepwellModel"]),
         .testTarget(name: "DeepwellLibraryTests", dependencies: ["DeepwellLibrary", "DeepwellModel"]),
         .testTarget(name: "DeepwellCaptureTests", dependencies: ["DeepwellCapture", "DeepwellLibrary", "DeepwellModel"]),

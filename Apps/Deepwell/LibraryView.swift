@@ -5,6 +5,8 @@ import DeepwellIndex
 struct LibraryView: View {
     @State private var model: LibraryModel
     @State private var selection: String?
+    @State private var showMenu = false
+    @State private var menu: MenuController?
 
     init(folder: URL) { _model = State(initialValue: LibraryModel(folder: folder)) }
 
@@ -23,6 +25,12 @@ struct LibraryView: View {
             .navigationSplitViewColumnWidth(min: 280, ideal: 340)
             .searchable(text: $model.searchText, prompt: "Search title and text")
             .toolbar {
+                ToolbarItem {
+                    Button {
+                        if menu == nil, let i = model.index { menu = MenuController(index: i) }
+                        showMenu = true
+                    } label: { Label("Weekly Menu", systemImage: "calendar.badge.clock") }
+                }
                 ToolbarItem {
                     Menu {
                         Picker("Type", selection: $model.typeFilter) {
@@ -45,6 +53,9 @@ struct LibraryView: View {
             } else {
                 Text("Select an item").foregroundStyle(.secondary)
             }
+        }
+        .sheet(isPresented: $showMenu) {
+            if let menu { MenuContainerView(controller: menu) { showMenu = false } }
         }
         .safeAreaInset(edge: .bottom) {
             if let msg = model.errorMessage { Text(msg).font(.caption).foregroundStyle(.red).padding(4) }

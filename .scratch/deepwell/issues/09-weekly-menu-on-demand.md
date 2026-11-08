@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Menu shows 3–5 bundles with topic, total time and ordered items with reasons
-- [ ] Bundle time is computed from `word_count`/`duration_minutes` and stays close to 5 hours
-- [ ] Only unread/unfinished items are eligible; the model's output is validated (known item ids, counts)
-- [ ] Picking a bundle creates the week queue; progress updates as items are marked done
-- [ ] Menu and pick are persisted, and survive a restart
+- [x] Menu shows 3–5 bundles with topic, total time and ordered items with reasons
+- [x] Bundle time is computed from `word_count`/`duration_minutes` and stays close to 5 hours
+- [x] Only unread/unfinished items are eligible; the model's output is validated (known item ids, counts)
+- [x] Picking a bundle creates the week queue; progress updates as items are marked done
+- [x] Menu and pick are persisted, and survive a restart
