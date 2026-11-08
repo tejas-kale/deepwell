@@ -53,3 +53,49 @@ xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -derivedDataPath build/d
 
 Verified: Swift unit tests, node extraction tests, `xcodebuild build` (unsigned). Not verified: anything running in
 Safari (see the UNVERIFIED note in spec.md Platform -> Risk), the app's folder picker UI, app-group signing.
+
+# YouTube capture (ticket 05)
+
+## Flow
+
+`content.js` sees a `youtube.com/watch?v=` (or `youtu.be/`) URL and hands it to `youtube.js` instead of Readability.
+`youtube.js` re-fetches the watch page by video id (same origin, logged-in cookies; the SPA's live DOM can be stale),
+reads `ytInitialPlayerResponse`, picks a caption track (any **manual** track beats auto-generated `asr`; then the
+browser's languages, then English, then first), downloads it as `fmt=json3` (XML parser is a fallback), and builds
+the payload. Only `capture()` does I/O; everything else is pure and tested in `tests/youtube.test.js` against
+fixtures in `tests/fixtures/youtube/`. Payload extras (`type`, `durationMinutes`, `needsTranscript`, `videoId`,
+`captionKind`, `captionLang`) are optional fields on `CapturePayload`; article payloads are unchanged.
+
+## Saved file
+
+- Frontmatter: `type: youtube`, `source_url` = canonical `https://www.youtube.com/watch?v=<id>`, `author` = channel,
+  `duration_minutes` = ceil(seconds / 60) (min 1), no `word_count`.
+- Body: one paragraph per ~30 s of speech, each `[m:ss](https://www.youtube.com/watch?v=ID&t=65s) text`.
+  `DeepwellYouTube.TranscriptParser` parses exactly this shape for the reader.
+
+## "Needs transcript" marker (contract for ticket 06)
+
+A video with no usable captions (none published, or the caption download failed/was empty) is still saved, with
+frontmatter line **`needs_transcript: true`** and a one-line placeholder body. It lives in `Item.extraFrontmatter`
+(round-trips; helpers in `DeepwellModel/NeedsTranscript.swift`: `item.needsTranscript`, `markNeedsTranscript()`,
+`clearNeedsTranscript()`). Ticket 06 should: find items where `needsTranscript` is true, transcribe the audio on
+device, replace the body with a transcript in the same timestamped-paragraph format above, then call
+`clearNeedsTranscript()` (key removed entirely) and rewrite the file. The same key is meant for podcasts.
+
+## Reader wiring (for ticket 02's branch)
+
+`Apps/Deepwell/YouTubeTranscriptView.swift` is self-contained and not referenced anywhere. To wire it: in the reader's
+detail view, when `document.item.type == .youtube`, show `YouTubeTranscriptView(document: document)` instead of the
+Markdown view. The app target now also depends on `DeepwellModel` and `DeepwellYouTube`, and has the
+`com.apple.security.network.client` entitlement (needed for the embed) in both `project.yml` and
+`Deepwell.entitlements`. If both branches touch `project.yml` dependencies, keep both sets.
+
+## Verified vs not
+
+Verified: node tests (19, 14 of them YouTube) on hand-written fixtures; `swift test`; unsigned `xcodebuild build`
+(the appex contains `youtube.js`). **Not verified:** any real YouTube page or caption download. Fixtures are
+hand-written to the known `ytInitialPlayerResponse` / json3 / XML shapes, NOT recorded from youtube.com, so a
+changed format would not be caught. YouTube has been tightening `timedtext` (PO tokens, empty responses); if a
+real track download returns empty, the video degrades to `needs_transcript`. Also unverified: Safari content-script
+`fetch`, the WKWebView embed (YouTube may refuse embeds with error 153 depending on referrer; the "Open in YouTube"
+link is the fallback) and timestamp seeking, and SwiftUI rendering of `YouTubeTranscriptView` (it compiles only).

@@ -15,6 +15,25 @@
     }
   }
 
+  async function fetchText(url) {
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.text();
+  }
+
+  // YouTube watch pages: re-fetch the page by video id (the SPA's DOM can be stale), read the
+  // caption track list from its player data, and build a transcript payload (see youtube.js).
+  async function extractYouTube() {
+    try {
+      return await DeepwellYouTube.capture(location.href, {
+        fetchText,
+        preferredLangs: [...(navigator.languages || []), "en"],
+      });
+    } catch (e) {
+      return { error: "YouTube capture failed: " + e.message };
+    }
+  }
+
   let toastEl = null;
   let hideTimer = null;
   function toast(state, text) {
@@ -36,6 +55,10 @@
 
   api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === "deepwell.extract") {
+      if (DeepwellYouTube.isWatchUrl(location.href)) {
+        extractYouTube().then(sendResponse);
+        return true; // async response
+      }
       sendResponse(extractNow());
     } else if (msg && msg.type === "deepwell.toast") {
       toast(msg.state, msg.text);

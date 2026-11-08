@@ -31,6 +31,10 @@ targets:
         product: DeepwellCapture
       - package: DeepwellCore
         product: DeepwellTagging
+      - package: DeepwellCore
+        product: DeepwellModel
+      - package: DeepwellCore
+        product: DeepwellYouTube
       - target: DeepwellSafariExtension
         embed: true
     settings:
