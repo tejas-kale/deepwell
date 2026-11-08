@@ -14,6 +14,12 @@ struct DeepwellApp: App {
                 }
         }
         .commands {
+            CommandGroup(after: .sidebar) {
+                Divider()
+                Button("Focus Sidebar") { focus(.sidebar) }.keyboardShortcut("1", modifiers: .command)
+                Button("Focus List") { focus(.list) }.keyboardShortcut("2", modifiers: .command)
+                Button("Focus Reader") { focus(.reader) }.keyboardShortcut("3", modifiers: .command)
+            }
             CommandMenu("Library") {
                 Button("Build New Focus") { NotificationCenter.default.post(name: .deepwellBuildFocus, object: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -21,10 +27,14 @@ struct DeepwellApp: App {
                     .keyboardShortcut("m", modifiers: [.command, .shift])
                 Button("Manage Tags…") { NotificationCenter.default.post(name: .deepwellManageTags, object: nil) }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
+                Button("Send Focus to Kindle") { NotificationCenter.default.post(name: .deepwellSendToKindle, object: nil) }
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
                 Divider()
                 Button("Rebuild Index") { NotificationCenter.default.post(name: .deepwellRebuildIndex, object: nil) }
             }
         }
-        Settings { SettingsView(tagging: model.tagging) }
+        Settings { SettingsView(tagging: model.tagging, kindle: model.kindle) }
     }
+
+    private func focus(_ p: Pane) { NotificationCenter.default.post(name: .deepwellFocusPane, object: p.rawValue) }
 }

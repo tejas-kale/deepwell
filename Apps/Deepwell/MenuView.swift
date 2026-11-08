@@ -11,14 +11,18 @@ struct CurrentFocusView: View {
     let library: LibraryModel
     @Binding var selection: String?
     @Binding var browsingMenu: Bool
+    var pane: FocusState<Pane?>.Binding
 
     var body: some View {
         if browsingMenu || controller.state.queue == nil {
             MenuView(controller: controller,
                      back: controller.state.queue == nil ? nil : { browsingMenu = false },
                      onPicked: { browsingMenu = false })
+                .focusable()
+                .focusEffectDisabled()
+                .focused(pane, equals: .list)
         } else {
-            QueueView(controller: controller, library: library, selection: $selection, browseMenu: { browsingMenu = true })
+            QueueView(controller: controller, library: library, selection: $selection, browseMenu: { browsingMenu = true }, pane: pane)
         }
     }
 }
@@ -29,6 +33,7 @@ private struct QueueView: View {
     let library: LibraryModel
     @Binding var selection: String?
     let browseMenu: () -> Void
+    var pane: FocusState<Pane?>.Binding
 
     var body: some View {
         if let q = controller.state.queue, let p = controller.progress {
@@ -56,6 +61,7 @@ private struct QueueView: View {
                     .textCase(nil)
                 }
             }
+            .focused(pane, equals: .list)
             .ayuSurface(Ayu.panel)
         } else {
             ContentUnavailableView("No bundle picked", systemImage: "scope", description: Text("Pick a bundle from the weekly menu."))

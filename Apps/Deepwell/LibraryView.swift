@@ -9,6 +9,8 @@ extension Notification.Name {
     static let deepwellBuildFocus = Notification.Name("deepwell.buildFocus")
     static let deepwellManageTags = Notification.Name("deepwell.manageTags")
     static let deepwellRebuildIndex = Notification.Name("deepwell.rebuildIndex")
+    /// Library > Send Focus to Kindle.
+    static let deepwellSendToKindle = Notification.Name("deepwell.sendToKindle")
 }
 
 /// Three columns: sidebar (Current Focus, All Captures, filters) | list | reader.
@@ -18,28 +20,35 @@ struct LibraryView: View {
     @State private var menu: MenuController?
     @State private var browsingMenu = false
     @State private var showTags = false
+    @State private var columns = NavigationSplitViewVisibility.all
+    @FocusState private var pane: Pane?
+    @State private var scroller = ReaderScroller()
+    /// Set when the focus was already sent once: asks before sending again.
+    @State private var resendDate: Date?
 
     let tagging: TaggingController
+    let kindle: KindleController
 
-    init(folder: URL, tagging: TaggingController) {
+    init(folder: URL, tagging: TaggingController, kindle: KindleController) {
         _model = State(initialValue: LibraryModel(folder: folder))
         self.tagging = tagging
+        self.kindle = kindle
     }
 
     /// Searching from Current Focus searches all captures.
     private var showsFocus: Bool { model.section == .focus && model.searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             SidebarView(model: model, focusRemaining: menu?.progress.map { p in p.rows.filter { $0.status != nil && $0.status != .done }.count } ?? 0,
-                        manageTags: { showTags = true })
+                        manageTags: { showTags = true }, pane: $pane)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
         } content: {
             Group {
                 if showsFocus, let menu {
-                    CurrentFocusView(controller: menu, library: model, selection: $selection, browsingMenu: $browsingMenu)
+                    CurrentFocusView(controller: menu, library: model, selection: $selection, browsingMenu: $browsingMenu, pane: $pane)
                 } else {
-                    ItemList(model: model, selection: $selection)
+                    ItemList(model: model, selection: $selection, pane: $pane)
                 }
             }
             .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
@@ -54,7 +63,13 @@ struct LibraryView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Ayu.background)
+            .background(ReaderScrollProbe(scroller: scroller))
+            .focusable()
+            .focusEffectDisabled()
+            .focused($pane, equals: .reader)
+            .readerScrollKeys(scroller)
         }
         .ayuTheme()
         .task(id: model.index != nil) {
@@ -68,11 +83,39 @@ struct LibraryView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .deepwellManageTags)) { _ in showTags = true }
         .onReceive(NotificationCenter.default.publisher(for: .deepwellRebuildIndex)) { _ in model.rebuildIndex() }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellFocusPane)) { n in
+            guard let p = (n.object as? String).flatMap(Pane.init(rawValue:)) else { return }
+            if p == .sidebar { columns = .all }
+            pane = p
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellSendToKindle)) { _ in sendToKindle() }
+        .alert("Send this focus to Kindle again?", isPresented: Binding(get: { resendDate != nil }, set: { if !$0 { resendDate = nil } })) {
+            Button("Send Again") { resendDate = nil; sendToKindle(force: true) }
+            Button("Cancel", role: .cancel) { resendDate = nil }
+        } message: {
+            Text("It was already sent on \(resendDate?.formatted(date: .abbreviated, time: .shortened) ?? "").")
+        }
         .sheet(isPresented: $showTags) { TagsView(model: model).ayuTheme() }
         .safeAreaInset(edge: .bottom) {
             if let msg = model.errorMessage { Text(msg).font(.caption).foregroundStyle(Ayu.red).padding(4) }
+            else if let s = kindle.status {
+                HStack(spacing: 6) {
+                    if kindle.isSending { ProgressView().controlSize(.mini) }
+                    Text(s).font(.caption).foregroundStyle(kindle.statusIsError ? AnyShapeStyle(Ayu.red) : AnyShapeStyle(.secondary))
+                }
+                .padding(4)
+            }
             else if let s = tagging.lastStatus { Text(s).font(.caption).foregroundStyle(.secondary).padding(4) }
         }
+    }
+
+    private func sendToKindle(force: Bool = false) {
+        guard let q = menu?.state.queue else {
+            kindle.notify("Pick a focus bundle first (Library > Weekly Menu).")
+            return
+        }
+        if !force, let sent = kindle.lastSent(q) { resendDate = sent; return }
+        kindle.send(q, library: model)
     }
 
     private func openMenu() {
@@ -89,6 +132,7 @@ private struct SidebarView: View {
     let model: LibraryModel
     let focusRemaining: Int
     let manageTags: () -> Void
+    var pane: FocusState<Pane?>.Binding
     /// Folded until you open it; then it stays the way you left it.
     @AppStorage("sidebar.tagsExpanded") private var tagsExpanded = false
 
@@ -129,6 +173,7 @@ private struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .focused(pane, equals: .sidebar)
         .ayuSurface(Ayu.panel)
         .onChange(of: model.section) { if case .tag = model.section { tagsExpanded = true } }
     }
@@ -169,6 +214,7 @@ extension ItemStatus {
 private struct ItemList: View {
     let model: LibraryModel
     @Binding var selection: String?
+    var pane: FocusState<Pane?>.Binding
 
     private var searching: Bool { !model.searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -176,6 +222,7 @@ private struct ItemList: View {
         List(model.items, id: \.relativePath, selection: $selection) { entry in
             ItemRow(entry: entry).tag(entry.relativePath)
         }
+        .focused(pane, equals: .list)
         .ayuSurface(Ayu.panel)
         .overlay {
             if model.items.isEmpty {

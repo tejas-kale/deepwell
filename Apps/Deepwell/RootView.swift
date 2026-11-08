@@ -9,7 +9,7 @@ struct RootView: View {
         case .needsFolder:
             FirstLaunchView(model: model)
         case .ready(let folder):
-            LibraryView(folder: folder, tagging: model.tagging).id(folder)
+            LibraryView(folder: folder, tagging: model.tagging, kindle: model.kindle).id(folder)
                 .dropDestination(for: URL.self) { urls, _ in
                     let mags = urls.filter { $0.isFileURL && IssueFormat(pathExtension: $0.pathExtension) != nil }
                     guard !mags.isEmpty else { return false }

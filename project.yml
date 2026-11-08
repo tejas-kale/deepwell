@@ -47,6 +47,8 @@ targets:
         product: DeepwellPodcasts
       - package: DeepwellCore
         product: DeepwellMagazines
+      - package: DeepwellCore
+        product: DeepwellKindle
       - target: DeepwellSafariExtension
         embed: true
       - target: DeepwellShareExtension

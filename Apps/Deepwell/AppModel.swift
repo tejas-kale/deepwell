@@ -25,6 +25,7 @@ final class AppModel {
     let tagging: TaggingController
     let transcription: TranscriptionController
     let magazines: MagazineController
+    let kindle = KindleController()
 
     init() {
         phase = .needsFolder
