@@ -201,9 +201,29 @@ final class PackagerTests: XCTestCase {
 
     func testOpenRouterReplyDecoding() throws {
         let b64 = Data([9, 8, 7]).base64EncodedString()
-        let reply = #"{"choices":[{"message":{"images":[{"image_url":{"url":"data:image/png;base64,\#(b64)"}}]}}]}"#
+        let reply = #"{"created":1,"data":[{"b64_json":"\#(b64)","media_type":"image/png"}]}"#
         XCTAssertEqual(try OpenRouterCoverArt.decodeImage(Data(reply.utf8)), Data([9, 8, 7]))
-        XCTAssertThrowsError(try OpenRouterCoverArt.decodeImage(Data("{}".utf8)))
+        XCTAssertThrowsError(try OpenRouterCoverArt.decodeImage(Data(#"{"choices":[]}"#.utf8))) { e in
+            XCTAssertTrue("\(e)".contains("choices"), "error should quote the reply: \(e)")
+        }
+    }
+
+    func testOpenRouterRequestUsesImageAPI() async throws {
+        let b64 = png(width: 8, height: 8).base64EncodedString()
+        final class Box: @unchecked Sendable { var req: URLRequest? }
+        let box = Box()
+        let artist = OpenRouterCoverArt(keys: InMemoryAPIKeyStore(key: "sk-or-x"), transport: StubTransport { req in
+            box.req = req
+            return (200, Data(#"{"data":[{"b64_json":"\#(b64)"}]}"#.utf8))
+        })
+        _ = try await artist.artwork(title: "Water", articleTitles: ["A", "B"])
+        let req = try XCTUnwrap(box.req)
+        XCTAssertEqual(req.url?.absoluteString, "https://openrouter.ai/api/v1/images")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer sk-or-x")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: req.httpBody!) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "openai/gpt-image-2")
+        XCTAssertTrue((body["prompt"] as? String)?.contains("Water") == true)
+        XCTAssertNil(body["messages"])
     }
 }
 

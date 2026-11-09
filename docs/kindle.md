@@ -16,8 +16,7 @@ the Kindle tab in `SettingsView.swift`, `sendToKindle()` in `LibraryView.swift`.
   JPEG and embedded. A failed image is dropped and its alt text kept; the footer reports how many.
 - **EPUB** (`EPUBWriter`, `ZipWriter`): EPUB 3 with an NCX alongside nav (Kindle's converter still reads it);
   `mimetype` first and stored. Title `Deepwell: <topic> · DD.MM.YYYY`. Over 50 MB: refused with a message.
-- **Cover** (`Cover.swift`): with an OpenRouter key, text-free art from `openai/gpt-5.4-image-2` (prompted from topic
-  and article titles), then the exact title is typeset locally on a dark band. No key or any failure: a plain Ayu
+- **Cover** (`Cover.swift`): with an OpenRouter key, text-free art from OpenRouter's Image API (`POST /api/v1/images`, `openai/gpt-image-2`, 9:16; prompted from topic  and article titles), then the exact title is typeset locally on a dark band. No key or any failure: a plain Ayu
   Mirage cover; the send still happens and the footer says why.
 - **Delivery** (`SMTP.swift`): SMTP over `URLSessionStreamTask` (STARTTLS on 587 or implicit TLS on 465), AUTH PLAIN,
   MIME multipart with the EPUB as base64. Defaults: smtp.gmail.com:587 STARTTLS; use a Gmail app password. The sender
@@ -41,5 +40,5 @@ fallback, AI cover; OpenRouter reply decoding; SMTP dialogue for STARTTLS/implic
 server; MIME layout); unsigned `xcodebuild`. A sample EPUB built from 6 real library captures: 39/39 images embedded,
 `unzip -t` clean, every XML file passes `xmllint`.
 
-Not verified: epubcheck (no Java runtime on this Mac); a real SMTP send to Gmail/Kindle; a real OpenRouter image call;
+Verified by use: a real Gmail SMTP send to Kindle (8 articles). Not verified: epubcheck (no Java runtime on this Mac); a real OpenRouter image call;
 how Kindle renders the book; the pane-focus keys and reader key scrolling in the running app (compiled, never run).

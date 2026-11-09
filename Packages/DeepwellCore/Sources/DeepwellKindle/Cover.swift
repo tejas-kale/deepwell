@@ -23,11 +23,11 @@ public enum CoverError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// Text-free art from an OpenRouter image model; the exact title is typeset locally afterwards, so a model can
-/// never misspell it. Same model and endpoint readpack used.
+/// Text-free art from OpenRouter's Image API (`POST /api/v1/images`, image in `data[0].b64_json`); the exact title is
+/// typeset locally afterwards, so a model can never misspell it. (Chat completions does not return images.)
 public struct OpenRouterCoverArt: CoverArtist {
-    public static let endpoint = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-    public static let defaultModel = "openai/gpt-5.4-image-2"
+    public static let endpoint = URL(string: "https://openrouter.ai/api/v1/images")!
+    public static let defaultModel = "openai/gpt-image-2"
 
     let keys: APIKeyStore
     let transport: HTTPTransport
@@ -53,8 +53,11 @@ public struct OpenRouterCoverArt: CoverArtist {
         req.setValue("Deepwell", forHTTPHeaderField: "X-Title")
         let body: [String: Any] = [
             "model": model,
-            "messages": [["role": "user", "content": Self.prompt(title: title, articleTitles: articleTitles)]],
-            "modalities": ["image", "text"],
+            "prompt": Self.prompt(title: title, articleTitles: articleTitles),
+            "n": 1,
+            "aspect_ratio": "9:16",   // closest portrait ratio to a 1600x2560 Kindle cover; aspect-filled later
+            "quality": "medium",
+            "output_format": "png",
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await transport.send(req)
@@ -66,15 +69,15 @@ public struct OpenRouterCoverArt: CoverArtist {
         return try Self.decodeImage(data)
     }
 
-    /// `choices[0].message.images[0].image_url.url` is a `data:image/...;base64,` URL.
+    /// `{"data":[{"b64_json":"...","media_type":"image/png"}]}`. The error quotes the start of any other reply.
     static func decodeImage(_ data: Data) throws -> Data {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choice = (json["choices"] as? [[String: Any]])?.first,
-              let message = choice["message"] as? [String: Any],
-              let image = (message["images"] as? [[String: Any]])?.first,
-              let url = (image["image_url"] as? [String: Any])?["url"] as? String
-        else { throw CoverError.badResponse("no image in reply") }
-        let b64 = url.split(separator: ",", maxSplits: 1).last.map(String.init) ?? url
+              let first = (json["data"] as? [[String: Any]])?.first,
+              let b64 = first["b64_json"] as? String
+        else {
+            let start = String(decoding: data.prefix(160), as: UTF8.self).replacingOccurrences(of: "\n", with: " ")
+            throw CoverError.badResponse("no image in reply: \(start)")
+        }
         guard let bytes = Data(base64Encoded: b64, options: .ignoreUnknownCharacters), !bytes.isEmpty else {
             throw CoverError.badResponse("image is not base64")
         }
