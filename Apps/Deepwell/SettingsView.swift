@@ -48,13 +48,9 @@ private struct MenuSettingsView: View {
         let z = preferences.menu
         Form {
             Section {
-                HStack {
-                    TextField("Model", text: $preferences.menu.model, prompt: Text(MenuSettings.defaultModel))
-                        .font(.body.monospaced())
-                    Menu("Presets") {
-                        ForEach(Self.models, id: \.1) { name, id in Button(name) { preferences.menu.model = id } }
-                    }
-                    .fixedSize()
+                Picker("Model", selection: $preferences.menu.model) {
+                    ForEach(Self.models, id: \.1) { name, id in Text(name).tag(id) }
+                    if !Self.models.contains(where: { $0.1 == z.model }) { Text(z.model).tag(z.model) }   // set elsewhere
                 }
                 Picker("Effort", selection: $preferences.menu.effort) {
                     ForEach(MenuSettings.efforts, id: \.self) { Text($0.capitalized).tag($0) }
@@ -67,13 +63,12 @@ private struct MenuSettingsView: View {
             }
 
             Section {
-                Stepper("At most \(formatMinutes(z.maxBundleMinutes)) per bundle",
-                        value: $preferences.menu.maxBundleMinutes, in: max(30, z.minBundleMinutes)...1200, step: 15)
-                Stepper("At least \(formatMinutes(z.minBundleMinutes)) per bundle",
-                        value: $preferences.menu.minBundleMinutes, in: 15...z.maxBundleMinutes, step: 15)
-                Stepper("At least \(z.minItems) items per bundle", value: $preferences.menu.minItems, in: 1...20)
-                Stepper("Up to \(z.maxBundles) bundle\(z.maxBundles == 1 ? "" : "s") to choose from",
-                        value: $preferences.menu.maxBundles, in: 1...10)
+                NumberRow("Longest bundle", value: $preferences.menu.maxBundleMinutes,
+                          in: max(15, z.minBundleMinutes)...1200, unit: "min")
+                NumberRow("Shortest bundle", value: $preferences.menu.minBundleMinutes,
+                          in: 15...z.maxBundleMinutes, unit: "min")
+                NumberRow("Fewest items per bundle", value: $preferences.menu.minItems, in: 1...50, unit: "items")
+                NumberRow("Most bundles to choose from", value: $preferences.menu.maxBundles, in: 1...10, unit: "bundles")
             } header: {
                 Text("Bundle size")
             } footer: {
@@ -82,12 +77,9 @@ private struct MenuSettingsView: View {
             }
 
             Section("Library") {
-                Stepper("Reading speed: \(z.wordsPerMinute) words a minute",
-                        value: $preferences.menu.wordsPerMinute, in: 100...600, step: 10)
-                Stepper("Send up to \(z.maxCandidates) items, newest first",
-                        value: $preferences.menu.maxCandidates, in: 20...1000, step: 10)
-                Stepper("Avoid the last \(z.recentPicks) picked topic\(z.recentPicks == 1 ? "" : "s")",
-                        value: $preferences.menu.recentPicks, in: 0...12)
+                NumberRow("Reading speed", value: $preferences.menu.wordsPerMinute, in: 50...1000, unit: "words/min")
+                NumberRow("Items sent to the model", value: $preferences.menu.maxCandidates, in: 10...2000, unit: "newest")
+                NumberRow("Recent topics to avoid", value: $preferences.menu.recentPicks, in: 0...52, unit: "picks")
             }
 
             Section {
@@ -223,6 +215,33 @@ private struct KindleSettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A label, a short right-aligned number field and its unit. Typed values are clamped to `range` when committed
+/// (Return or leaving the field).
+private struct NumberRow: View {
+    let label: String
+    let value: Binding<Int>
+    let range: ClosedRange<Int>
+    let unit: String
+
+    init(_ label: String, value: Binding<Int>, in range: ClosedRange<Int>, unit: String) {
+        self.label = label; self.value = value; self.range = range; self.unit = unit
+    }
+
+    var body: some View {
+        LabeledContent(label) {
+            HStack(spacing: 6) {
+                TextField(label, value: Binding(get: { value.wrappedValue },
+                                                set: { value.wrappedValue = min(max($0, range.lowerBound), range.upperBound) }),
+                          format: .number.grouping(.never))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 64)
+                Text(unit).foregroundStyle(.secondary).frame(width: 72, alignment: .leading)
+            }
+        }
     }
 }
 
