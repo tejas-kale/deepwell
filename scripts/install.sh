@@ -38,6 +38,16 @@ fi
 echo "==> Installing $VERSION to $DEST"
 rm -rf "$DEST"
 ditto "$APP" "$DEST"
+# Unregister every other Deepwell build (DerivedData, build/, old worktrees) so Safari lists one extension.
+shopt -s nullglob
+"$LSREGISTER" -dump 2>/dev/null \
+  | sed -nE 's/^path: +(.*\/Deepwell\.app) \(0x[0-9a-f]+\)$/\1/p' \
+  | { grep -vxF "$DEST" || true; } \
+  | while read -r stale; do
+      for ext in "$stale"/Contents/PlugIns/*.appex; do pluginkit -r "$ext" 2>/dev/null || true; done
+      "$LSREGISTER" -u "$stale" 2>/dev/null || true
+    done
+shopt -u nullglob
 # Make the installed copy the one that handles deepwell:// and provides the Safari/Share extensions.
 "$LSREGISTER" -f "$DEST"
 pluginkit -a "$DEST/Contents/PlugIns/DeepwellSafariExtension.appex" 2>/dev/null || true
