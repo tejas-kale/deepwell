@@ -13,14 +13,21 @@ final class MenuController {
     private(set) var progress: QueueProgress?
     private(set) var isBuilding = false
     private(set) var errorMessage: String?
-    private let service: MenuService?
+    private let index: LibraryIndex
+    private let store: MenuStore?
+
+    /// Made per use so a change in Settings > Weekly Menu applies to the next build.
+    private var service: MenuService? {
+        store.map { MenuService(index: index, builder: .anthropic(keys: KeychainAPIKeyStore(), settings: settings), store: $0) }
+    }
+    private var settings: MenuSettings { Preferences.shared.menu }
 
     init(index: LibraryIndex) {
+        self.index = index
         do {
-            let store = MenuStore(url: try MenuStore.defaultURL())
-            service = MenuService(index: index, builder: MenuBuilder(model: AnthropicMenuModel(keys: KeychainAPIKeyStore())), store: store)
+            store = MenuStore(url: try MenuStore.defaultURL())
         } catch {
-            service = nil
+            store = nil
             errorMessage = "Could not open menu storage: \(error.localizedDescription)"
         }
         refresh()
@@ -33,7 +40,8 @@ final class MenuController {
     }
 
     func rebuild() {
-        guard let service, !isBuilding else { return }
+        guard !isBuilding, let service else { return }
+        let settings = self.settings
         isBuilding = true
         errorMessage = nil
         Task {
@@ -41,8 +49,8 @@ final class MenuController {
             catch TaggingError.missingAPIKey { errorMessage = "Set your Anthropic API key in Settings first." }
             catch MenuError.notEnoughItems(let n, let minutes) {
                 errorMessage = "Not enough to build a bundle yet: \(n) unread item\(n == 1 ? "" : "s") with a known length, "
-                    + "\(formatMinutes(minutes)) in total. A bundle needs at least \(MenuSizing.minItems) items and "
-                    + "\(formatMinutes(MenuSizing.minBundleMinutes))."
+                    + "\(formatMinutes(minutes)) in total. A bundle needs at least \(settings.minItems) items and "
+                    + "\(formatMinutes(settings.minBundleMinutes)) (Settings > Weekly Menu)."
             }
             catch MenuError.invalidModelOutput(let why) {
                 errorMessage = "The model's answer couldn't be used, twice. Try Rebuild again.\n\nDetails: \(why)"

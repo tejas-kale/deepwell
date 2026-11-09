@@ -10,7 +10,8 @@ struct DeepwellApp: App {
             RootView(model: model)
                 .frame(minWidth: 1000, minHeight: 560)
                 .onOpenURL { url in   // deepwell://inbox wake-up from the extensions, or a PDF/EPUB opened via the Dock icon
-                    if url.isFileURL { model.importMagazines([url]) } else { model.drainInbox() }
+                    if url.isFileURL { model.importMagazines([url]) }
+                    else { model.drainInbox(); Preferences.shared.handleSaveWakeUp() }
                 }
         }
         .commands {
@@ -33,7 +34,7 @@ struct DeepwellApp: App {
                 Button("Rebuild Index") { NotificationCenter.default.post(name: .deepwellRebuildIndex, object: nil) }
             }
         }
-        Settings { SettingsView(tagging: model.tagging, kindle: model.kindle) }
+        Settings { SettingsView(tagging: model.tagging, kindle: model.kindle, preferences: Preferences.shared) }
     }
 
     private func focus(_ p: Pane) { NotificationCenter.default.post(name: .deepwellFocusPane, object: p.rawValue) }

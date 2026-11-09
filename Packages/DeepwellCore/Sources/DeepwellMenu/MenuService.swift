@@ -51,14 +51,16 @@ public final class MenuService: @unchecked Sendable {
 
     /// Topics picked in the last `weeks` weeks (fed to the prompt; ticket 10 can reuse it).
     public func recentTopics(weeks: Int = 4) -> [String] {
-        state.history.suffix(weeks).map(\.topic)
+        weeks > 0 ? state.history.suffix(weeks).map(\.topic) : []
     }
 
     /// Builds a fresh menu from unread/unfinished items and persists it. An existing pick (week queue) is kept.
     @discardableResult
     public func rebuild() async throws -> WeeklyMenu {
         let items = try index.list().map(\.item)
-        let bundles = try await builder.build(candidates: MenuCandidate.eligible(from: items), recentTopics: recentTopics())
+        let z = builder.settings
+        let bundles = try await builder.build(candidates: MenuCandidate.eligible(from: items, wordsPerMinute: z.wordsPerMinute),
+                                              recentTopics: recentTopics(weeks: z.recentPicks))
         let menu = WeeklyMenu(builtAt: now(), weekStart: weekStart(of: now()), bundles: bundles)
         var s = store.load()
         s.menu = menu

@@ -8,12 +8,14 @@ public protocol MenuModel: Sendable {
 }
 
 public struct AnthropicMenuModel: MenuModel {
-    public static let defaultModel = "claude-sonnet-5-5"
     let client: AnthropicClient
     let model: String
-    public init(keys: APIKeyStore, transport: HTTPTransport = URLSessionTransport(), model: String = defaultModel) {
+    let effort: String
+    public init(keys: APIKeyStore, transport: HTTPTransport = URLSessionTransport(),
+                model: String = MenuSettings.defaultModel, effort: String = MenuSettings().effort) {
         client = AnthropicClient(keys: keys, transport: transport)
         self.model = model
+        self.effort = effort
     }
     /// Structured output: the reply is guaranteed to be this JSON shape (it used to come back as prose).
     static let schema: [String: Any] = [
@@ -45,36 +47,45 @@ public struct AnthropicMenuModel: MenuModel {
     ]
 
     /// Sonnet 5.5 thinks by default (effort `high`), and thinking counts against max_tokens, so an 8k budget
-    /// could end before any JSON. Medium effort and a 16k budget (the non-streaming ceiling) leave room for both.
+    /// could end before any JSON. Medium effort (the default setting) and a 16k budget (the non-streaming
+    /// ceiling) leave room for both.
     public func complete(system: String, user: String) async throws -> String {
         try await client.complete(model: model, system: system, user: user, maxTokens: 16000, timeout: 300,
-                                  effort: "medium", schema: Self.schema)
+                                  effort: effort, schema: Self.schema)
     }
 }
 
 public struct MenuBuilder: Sendable {
-    /// Without at least one bundle's worth of material (3 items, 2.5 h) no bundle can exist; don't spend an API call.
-    public static func hasEnoughMaterial(_ c: [MenuCandidate]) -> Bool {
-        c.count >= MenuSizing.minItems && c.reduce(0, { $0 + $1.minutes }) >= MenuSizing.minBundleMinutes
+    /// Without at least one bundle's worth of material (min items, min minutes) no bundle can exist; don't spend
+    /// an API call.
+    public static func hasEnoughMaterial(_ c: [MenuCandidate], settings: MenuSettings = MenuSettings()) -> Bool {
+        c.count >= settings.minItems && c.reduce(0, { $0 + $1.minutes }) >= settings.minBundleMinutes
     }
 
     let model: MenuModel
-    public init(model: MenuModel) { self.model = model }
+    public let settings: MenuSettings
+    public init(model: MenuModel, settings: MenuSettings = MenuSettings()) { self.model = model; self.settings = settings }
+
+    /// The production builder for the given settings (model and effort come from them).
+    public static func anthropic(keys: APIKeyStore, settings: MenuSettings) -> MenuBuilder {
+        MenuBuilder(model: AnthropicMenuModel(keys: keys, model: settings.model, effort: settings.effort), settings: settings)
+    }
 
     /// Builds validated bundles. Calls the model; if no bundle survives validation (or the output is
     /// unparseable) retries once with the problems appended; otherwise throws `invalidModelOutput`.
     public func build(candidates: [MenuCandidate], recentTopics: [String] = []) async throws -> [MenuBundle] {
-        guard Self.hasEnoughMaterial(candidates) else {
+        guard Self.hasEnoughMaterial(candidates, settings: settings) else {
             throw MenuError.notEnoughItems(eligible: candidates.count, minutes: candidates.reduce(0) { $0 + $1.minutes })
         }
-        let shown = Array(candidates.prefix(MenuPrompt.maxCandidates))   // validate against what the model saw
+        let shown = Array(candidates.prefix(settings.maxCandidates))   // validate against what the model saw
         var feedback: [String] = []
         for _ in 0..<2 {
             let raw = try await model.complete(
-                system: MenuPrompt.system,
-                user: MenuPrompt.user(candidates: shown, recentTopics: recentTopics, feedback: feedback))
+                system: settings.systemPrompt,
+                user: MenuPrompt.user(candidates: shown, recentTopics: recentTopics, feedback: feedback,
+                                      maxCandidates: settings.maxCandidates))
             do {
-                let r = try MenuValidator.validate(raw, candidates: shown)
+                let r = try MenuValidator.validate(raw, candidates: shown, settings: settings)
                 if r.isValid { return r.bundles }
                 feedback = r.problems
             } catch MenuError.invalidModelOutput(let why) {

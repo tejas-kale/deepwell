@@ -176,6 +176,54 @@ final class BuilderTests: XCTestCase {
     }
 }
 
+final class SettingsTests: XCTestCase {
+    func testDefaultPromptHasTheDefaultNumbersFilledIn() {
+        let p = MenuSettings().systemPrompt
+        XCTAssertTrue(p.contains("up to 5 topic bundles"))
+        XCTAssertTrue(p.contains("never more than 240 and never less than 150 minutes"))
+        XCTAssertTrue(p.contains("(at least 3)"))
+        XCTAssertFalse(p.contains("{"+"max_minutes}"))
+    }
+    func testCustomSizingReachesValidatorPromptAndModel() async throws {
+        var z = MenuSettings()
+        z.maxBundleMinutes = 90; z.minBundleMinutes = 60; z.minItems = 2; z.maxBundles = 2
+        z.promptTemplate = "Plan {max_bundles} bundles of {min_minutes}-{max_minutes} min, {min_items}+ items."
+        let seen = Box<String>()
+        final class Spy: MenuModel, @unchecked Sendable {
+            let seen: Box<String>; let reply: String
+            init(_ s: Box<String>, _ r: String) { seen = s; reply = r }
+            func complete(system: String, user: String) async throws -> String { seen.value = system; return reply }
+        }
+        // Two 45-min items = 90: valid under these settings, not under the defaults.
+        let reply = menuJSON([bundleJSON("A", ["c00", "c01"]), bundleJSON("B", ["c02", "c03"]), bundleJSON("C", ["c04", "c05"])])
+        let b = try await MenuBuilder(model: Spy(seen, reply), settings: z).build(candidates: candidates())
+        XCTAssertEqual(b.map(\.topic), ["A", "B"])   // capped at 2
+        XCTAssertEqual(seen.value, "Plan 2 bundles of 60-90 min, 2+ items.")
+        XCTAssertFalse(try MenuValidator.validate(reply, candidates: candidates()).isValid)
+    }
+    func testModelAndEffortComeFromSettings() async throws {
+        let seen = Box<[String: Any]>()
+        let t = StubTransport { req in
+            seen.value = try JSONSerialization.jsonObject(with: req.httpBody!) as? [String: Any]
+            return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": "ok"]]])
+        }
+        _ = try await AnthropicMenuModel(keys: MemKeys(), transport: t, model: "claude-opus-5-5", effort: "high")
+            .complete(system: "s", user: "u")
+        XCTAssertEqual(seen.value?["model"] as? String, "claude-opus-5-5")
+        XCTAssertEqual((seen.value?["output_config"] as? [String: Any])?["effort"] as? String, "high")
+    }
+    func testWordsPerMinuteAndCandidateCap() {
+        XCTAssertEqual(MenuSizing.remainingMinutes(Item(type: .article, title: "a", wordCount: 1000), wordsPerMinute: 100), 10)
+        XCTAssertEqual(MenuPrompt.user(candidates: candidates(), recentTopics: [], maxCandidates: 2)
+            .split(separator: "\n").filter { $0.hasPrefix("c") }.count, 2)
+    }
+    func testPartialStoredJSONDecodesToDefaults() throws {
+        let z = try JSONDecoder().decode(MenuSettings.self, from: Data(#"{"model":"claude-haiku-5-5"}"#.utf8))
+        var expected = MenuSettings(); expected.model = "claude-haiku-5-5"
+        XCTAssertEqual(z, expected)
+    }
+}
+
 final class Box<T>: @unchecked Sendable {
     var value: T?
     init(_ v: T? = nil) { value = v }

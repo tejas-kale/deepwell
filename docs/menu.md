@@ -35,3 +35,13 @@ Rebuild in the Current Focus column (or Library > Weekly Menu, ⇧⌘M, to show 
 `ScheduleTests.swift` and `MenuNotifications.swift` are gone. Eligibility is unchanged: unread and in-progress items
 with a known length; finished items, including the previous focus list's, are never offered. The previous pick's topic
 is still sent as a "recently picked topic" to deprioritise.
+
+# Settings > Weekly Menu
+
+Everything above that was a constant is now `MenuSettings` (DeepwellMenu/MenuTypes.swift), stored as JSON in
+UserDefaults (`menu.settings`) by `Apps/Deepwell/Preferences.swift`: model (default `claude-sonnet-5-5`), effort
+(default medium), the system prompt template, max/min bundle minutes, min items, max bundles, words per minute,
+candidate cap, and how many recent picks to deprioritise. The template's `{max_minutes}`, `{min_minutes}`,
+`{min_items}` and `{max_bundles}` are filled in from the sizing, so prompt and validator agree. Changes apply to the
+next Build Menu / Rebuild (`MenuController` makes a fresh `MenuService` per use). Stored JSON missing a field
+decodes that field to its default.

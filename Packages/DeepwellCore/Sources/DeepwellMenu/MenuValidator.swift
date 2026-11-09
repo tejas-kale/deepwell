@@ -1,20 +1,23 @@
 import Foundation
 
-/// Strict validation of the model's JSON. Policy for out-of-range output:
-///  - REPAIR what is unambiguous: unknown ids and ids already used earlier are dropped; a bundle over 4 hours
-///    loses items from the end until it fits (they are ordered introductory to deeper, so the deepest go).
-///  - DROP any bundle that after repair has fewer than 3 items or under 2.5 hours, and any with no topic.
-///  - Keep at most 5 bundles (first ones). If none survive the result is invalid with `problems`, and
+/// Strict validation of the model's JSON. Limits come from `MenuSettings` (defaults in brackets).
+/// Policy for out-of-range output:
+///  - REPAIR what is unambiguous: unknown ids and ids already used earlier are dropped; a bundle over the maximum
+///    [4 h] loses items from the end until it fits (they are ordered introductory to deeper, so the deepest go).
+///  - DROP any bundle that after repair has fewer than the minimum items [3] or minutes [2.5 h], and any with no topic.
+///  - Keep at most the maximum bundles [5] (first ones). If none survive the result is invalid with `problems`, and
 ///    `MenuBuilder` retries once, passing the problems back to the model; then it throws.
 /// Minutes always come from our data, never from the model.
 public struct ValidationResult: Equatable, Sendable {
     public var bundles: [MenuBundle]
     public var problems: [String]
-    public var isValid: Bool { MenuSizing.bundleCount.contains(bundles.count) }
+    /// Validation never keeps more than the maximum, so any surviving bundle makes the result usable.
+    public var isValid: Bool { !bundles.isEmpty }
 }
 
 public enum MenuValidator {
-    public static func validate(_ raw: String, candidates: [MenuCandidate]) throws -> ValidationResult {
+    public static func validate(_ raw: String, candidates: [MenuCandidate],
+                                settings z: MenuSettings = MenuSettings()) throws -> ValidationResult {
         guard let open = raw.firstIndex(of: "{"), let close = raw.lastIndex(of: "}"), open < close,
               let obj = (try? JSONSerialization.jsonObject(with: Data(raw[open...close].utf8))) as? [String: Any],
               let rawBundles = obj["bundles"] as? [[String: Any]] else {
@@ -43,21 +46,21 @@ public enum MenuValidator {
                 entries.append(MenuEntry(itemID: id, title: c.title, minutes: c.minutes, reason: reason))
             }
             var total = entries.reduce(0) { $0 + $1.minutes }
-            if total > MenuSizing.maxBundleMinutes {
-                while total > MenuSizing.maxBundleMinutes, let last = entries.popLast() { total -= last.minutes }
-                problems.append("\(name): over \(MenuSizing.maxBundleMinutes) min; deepest items cut to \(total) min")
+            if total > z.maxBundleMinutes {
+                while total > z.maxBundleMinutes, let last = entries.popLast() { total -= last.minutes }
+                problems.append("\(name): over \(z.maxBundleMinutes) min; deepest items cut to \(total) min")
             }
-            if entries.count < MenuSizing.minItems {
-                problems.append("\(name): \(entries.count) valid items, need at least \(MenuSizing.minItems); dropped"); continue
+            if entries.count < z.minItems {
+                problems.append("\(name): \(entries.count) valid items, need at least \(z.minItems); dropped"); continue
             }
-            if total < MenuSizing.minBundleMinutes {
-                problems.append("\(name): totals \(total) min, need \(MenuSizing.minBundleMinutes)-\(MenuSizing.maxBundleMinutes); dropped"); continue
+            if total < z.minBundleMinutes {
+                problems.append("\(name): totals \(total) min, need \(z.minBundleMinutes)-\(z.maxBundleMinutes); dropped"); continue
             }
-            if out.count >= MenuSizing.bundleCount.upperBound { break }
+            if out.count >= z.bundleCount.upperBound { break }
             used.formUnion(entries.map(\.itemID))
             out.append(MenuBundle(topic: topic, entries: entries))
         }
-        if out.count < MenuSizing.bundleCount.lowerBound {
+        if out.count < z.bundleCount.lowerBound {
             problems.append("no usable bundles")
         }
         return ValidationResult(bundles: out, problems: problems)

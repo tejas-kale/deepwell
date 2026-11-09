@@ -17,7 +17,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             let payload = try JSONDecoder().decode(CapturePayload.self, from: data)
             try CaptureInbox(directory: SharedConfig.inboxDirectory).enqueue(payload)
             // Wake the app so the capture is written right away (app also drains on launch/timer).
-            NSWorkspace.shared.open(SharedConfig.wakeURL)
+            SharedConfig.wakeApp()
             reply = ["ok": true]
         } catch {
             reply = ["ok": false, "error": "Deepwell: \(error.localizedDescription)"]

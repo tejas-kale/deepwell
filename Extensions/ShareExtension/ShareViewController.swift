@@ -23,7 +23,7 @@ final class ShareViewController: NSViewController {
                 do {
                     guard let url = await sharedURL(providers) else { throw CocoaError(.fileReadUnsupportedScheme) }
                     try CaptureInbox(directory: SharedConfig.inboxDirectory).enqueue(.link(url))
-                    NSWorkspace.shared.open(SharedConfig.wakeURL)
+                    SharedConfig.wakeApp()
                     extensionContext?.completeRequest(returningItems: nil)
                 } catch {
                     extensionContext?.cancelRequest(withError: error)
@@ -73,7 +73,7 @@ final class ShareViewController: NSViewController {
         }
         group.notify(queue: .main) { [weak self] in
             if let failed { self?.extensionContext?.cancelRequest(withError: failed); return }
-            NSWorkspace.shared.open(SharedConfig.wakeURL)
+            SharedConfig.wakeApp()
             self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
         }
     }

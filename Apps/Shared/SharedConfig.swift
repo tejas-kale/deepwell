@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Glue shared by the app and the Safari extension handler: where the capture inbox lives.
 ///
@@ -27,4 +27,12 @@ enum SharedConfig {
     }
 
     static let wakeURL = URL(string: "deepwell://inbox")!
+
+    /// Wakes (or launches) the app without bringing it to the front; the app activates itself if the
+    /// "Bring Deepwell to the front" setting is on (Settings > General).
+    static func wakeApp() {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = false
+        NSWorkspace.shared.open(wakeURL, configuration: config, completionHandler: nil)
+    }
 }
