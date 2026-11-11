@@ -51,6 +51,8 @@ targets:
         product: DeepwellKindle
       - package: DeepwellCore
         product: DeepwellNarration
+      - package: DeepwellCore
+        product: DeepwellUI
       - target: DeepwellSafariExtension
         embed: true
       - target: DeepwellShareExtension

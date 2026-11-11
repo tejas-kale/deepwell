@@ -3,6 +3,7 @@ import Observation
 import DeepwellModel
 import DeepwellIndex
 import DeepwellCuration
+import DeepwellUI
 
 /// What the sidebar has selected. Current Focus is this week's bundle; the rest are views of all captures.
 enum LibrarySection: Hashable {
@@ -115,5 +116,23 @@ final class LibraryModel {
             errorMessage = "Query failed: \(error.localizedDescription)"
         }
         revision += 1
+    }
+}
+
+extension LibraryModel: TagsModel {
+    /// Runs a tag curation action (file rewrites + index refresh in `TagCurator`), then refreshes the list.
+    func curate(_ action: (TagCurator) throws -> CurationResult) {
+        guard let curator = makeCurator() else { return }
+        do {
+            let result = try action(curator)
+            reportCuration(result)
+        } catch {
+            reportCurationError("Tag change failed: \(error.localizedDescription)")
+        }
+    }
+
+    func showItems(tagged tag: String) {
+        searchText = ""
+        section = .tag(tag)
     }
 }

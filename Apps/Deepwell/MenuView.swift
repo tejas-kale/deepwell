@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepwellUI
 import DeepwellMenu
 import DeepwellModel
 

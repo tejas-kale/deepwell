@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepwellTranscription
 
 /// Small status chip for a library row: "Queued", a progress bar, or an error with a Retry button.
 /// Additive: the library list (ticket 02) decides where to place it, e.g.
@@ -23,7 +24,7 @@ public struct TranscriptionStatusView: View {
                 ProgressView(value: p) { Text("Transcribing \(Int(p * 100))%") }.frame(maxWidth: 180)
             case .failed(let message):
                 Label("Transcription failed", systemImage: "exclamationmark.triangle").foregroundStyle(.red).help(message)
-                Button("Retry", action: onRetry).buttonStyle(.link)
+                Button("Retry", action: onRetry).linkButtonStyle()
             }
         }
         .font(.caption)

@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepwellUI
 import DeepwellModel
 import DeepwellIndex
 

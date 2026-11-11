@@ -2,29 +2,28 @@ import SwiftUI
 import DeepwellIndex
 import DeepwellCuration
 
-extension LibraryModel {
-    /// Runs a tag curation action (file rewrites + index refresh in `TagCurator`), then refreshes the list.
-    func curate(_ action: (TagCurator) throws -> CurationResult) {
-        guard let curator = makeCurator() else { return }
-        do {
-            let result = try action(curator)
-            reportCuration(result)
-        } catch {
-            reportCurationError("Tag change failed: \(error.localizedDescription)")
-        }
-    }
+/// What the tag curation screen needs from the app's library model. The Mac's `LibraryModel` conforms.
+@MainActor
+public protocol TagsModel: AnyObject {
+    var tagSummaries: [TagSummary] { get }
+    /// Runs a curation action (file rewrites + index refresh in `TagCurator`), then refreshes the list.
+    func curate(_ action: (TagCurator) throws -> CurationResult)
+    /// "Show Items": switch the library to the items carrying `tag`.
+    func showItems(tagged tag: String)
 }
 
 /// Tag curation screen: counts, new-tag flags, rename / merge / delete. All logic is in `TagCurator`.
-struct TagsView: View {
-    let model: LibraryModel
+public struct TagsView<Model: TagsModel>: View {
+    let model: Model
     @Environment(\.dismiss) private var dismiss
     @State private var renaming: TagSummary?
     @State private var merging: TagSummary?
     @State private var deleting: TagSummary?
     @State private var text = ""
 
-    var body: some View {
+    public init(model: Model) { self.model = model }
+
+    public var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Tags").font(.title2.bold())
@@ -45,7 +44,7 @@ struct TagsView: View {
                     Text("\(tag.itemCount)").foregroundStyle(.secondary).monospacedDigit()
                 }
                 .contextMenu {
-                    Button("Show Items") { model.searchText = ""; model.section = .tag(tag.name); dismiss() }
+                    Button("Show Items") { model.showItems(tagged: tag.name); dismiss() }
                     Button("Rename…") { text = tag.name; renaming = tag }
                     Menu("Merge Into") {
                         ForEach(model.tagSummaries.filter { $0.name != tag.name }, id: \.name) { other in

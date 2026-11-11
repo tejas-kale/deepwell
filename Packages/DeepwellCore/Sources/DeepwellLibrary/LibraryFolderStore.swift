@@ -18,8 +18,14 @@ public final class LibraryFolderStore: @unchecked Sendable {
         self.coding = coding
     }
 
+    #if os(macOS)
+    public static var defaultHome: URL { FileManager.default.homeDirectoryForCurrentUser }
+    #else
+    public static var defaultHome: URL { URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true) }
+    #endif
+
     /// `~/Library/Mobile Documents/com~apple~CloudDocs/Deepwell`, i.e. "iCloud Drive/Deepwell".
-    public static func defaultICloudFolder(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+    public static func defaultICloudFolder(home: URL = defaultHome) -> URL {
         home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Deepwell", isDirectory: true)
     }
 

@@ -6,11 +6,10 @@ import DeepwellYouTube
 /// Reader view for `type: youtube` items: the video (embedded, with a link out) above the transcript.
 /// Self-contained: give it a parsed `ItemDocument`; it does not know about the library or the reader.
 /// Tapping a timestamp restarts the embed at that moment.
-///
-/// Not yet wired into the reader (ticket 02 owns it). Wiring: in the reader's detail switch, for
-/// `item.type == .youtube` show `YouTubeTranscriptView(document: doc)` instead of the Markdown view.
-struct YouTubeTranscriptView: View {
+public struct YouTubeTranscriptView: View {
     let document: ItemDocument
+
+    public init(document: ItemDocument) { self.document = document }
 
     @State private var startSeconds = 0
     @State private var autoplay = false
@@ -19,7 +18,7 @@ struct YouTubeTranscriptView: View {
     private var videoID: String? { YouTube.videoID(from: item.sourceURL) }
     private var segments: [TranscriptSegment] { TranscriptParser.parse(document.body) }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             if let id = videoID {
                 YouTubeEmbedView(url: YouTube.embedURL(id: id, startSeconds: startSeconds, autoplay: autoplay))
@@ -68,7 +67,7 @@ struct YouTubeTranscriptView: View {
                     ForEach(segments) { seg in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Button(seg.timestamp) { startSeconds = seg.startSeconds; autoplay = true }
-                                .buttonStyle(.link)
+                                .linkButtonStyle()
                                 .font(.caption.monospacedDigit())
                                 .frame(width: 56, alignment: .trailing)
                             Text(seg.text).textSelection(.enabled)
@@ -83,18 +82,21 @@ struct YouTubeTranscriptView: View {
 
 /// Minimal WKWebView wrapper for the YouTube embed. Needs the `com.apple.security.network.client`
 /// entitlement in the sandboxed app. Reloads when `url` changes (used to seek).
-struct YouTubeEmbedView: NSViewRepresentable {
+struct YouTubeEmbedView {
     let url: URL
 
-    func makeNSView(context: Context) -> WKWebView {
+    fileprivate func makeWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []
+        #if os(iOS)
+        config.allowsInlineMediaPlayback = true   // otherwise iPhone jumps straight to full screen
+        #endif
         return WKWebView(frame: .zero, configuration: config)
     }
 
-    func updateNSView(_ web: WKWebView, context: Context) {
-        guard context.coordinator.loaded != url else { return }
-        context.coordinator.loaded = url
+    fileprivate func update(_ web: WKWebView, coordinator: Coordinator) {
+        guard coordinator.loaded != url else { return }
+        coordinator.loaded = url
         // An https baseURL gives the embed a Referer; loading the iframe from a bare string would not.
         let html = """
         <!doctype html><html><body style="margin:0;background:#000">
@@ -108,3 +110,16 @@ struct YouTubeEmbedView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
     final class Coordinator { var loaded: URL? }
 }
+
+// Seam: the same web view behind each platform's representable.
+#if os(macOS)
+extension YouTubeEmbedView: NSViewRepresentable {
+    func makeNSView(context: Context) -> WKWebView { makeWebView() }
+    func updateNSView(_ web: WKWebView, context: Context) { update(web, coordinator: context.coordinator) }
+}
+#else
+extension YouTubeEmbedView: UIViewRepresentable {
+    func makeUIView(context: Context) -> WKWebView { makeWebView() }
+    func updateUIView(_ web: WKWebView, context: Context) { update(web, coordinator: context.coordinator) }
+}
+#endif

@@ -1,12 +1,13 @@
 import SwiftUI
 import DeepwellModel
+import DeepwellNarration
 
 /// Small block-level Markdown renderer (headings, paragraphs, lists, quotes, code fences, rules, images).
 /// Inline styling (bold, italic, code, links) comes from AttributedString's Markdown parser.
 /// Lists and quotes use the same serif body type as paragraphs; consecutive list items sit close together.
 /// Blocks come from `ArticleBlocks`, the same parse narration uses, so the spoken word can be highlighted in place.
 /// Each block is tagged `MarkdownBody.blockID(i)` for scrolling.
-struct MarkdownBody: View {
+public struct MarkdownBody: View {
     static let bodyFont = Font.system(size: 17, design: .serif)
     static let bodyLineSpacing: CGFloat = 7
     static func blockID(_ i: Int) -> String { "block-\(i)" }
@@ -17,7 +18,7 @@ struct MarkdownBody: View {
     var onWord: (Int) -> Void = { _ in }
 
     init(markdown: String) { blocks = ArticleBlocks.blocks(for: markdown) }
-    init(blocks: [ArticleBlock], overlay: NarrationOverlay?, onWord: @escaping (Int) -> Void) {
+    public init(blocks: [ArticleBlock], overlay: NarrationOverlay?, onWord: @escaping (Int) -> Void) {
         self.blocks = blocks; self.overlay = overlay; self.onWord = onWord
     }
 
@@ -43,7 +44,7 @@ struct MarkdownBody: View {
         return out
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(Self.groups(blocks)) { g in
                 if g.tight, case .quote = g.blocks[0].1 {
@@ -198,4 +199,38 @@ let readerContentSpace = "reader-content"
 struct SpokenWordYKey: PreferenceKey {
     static var defaultValue: CGFloat?
     static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = value ?? nextValue() }
+}
+
+// MARK: Narration highlight input
+
+/// What the reader marks while narration plays: the word, and the sentence around it, per block.
+public struct NarrationOverlay: Equatable {
+    var word: WordLocation?
+    /// Block index -> `Character` range of the current sentence within that block.
+    var sentence: [Int: Range<Int>]
+    /// Block index -> (range, global word index) of every narrated word, for click-to-seek.
+    var words: [Int: [(range: Range<Int>, index: Int)]]
+
+    public static func == (a: Self, b: Self) -> Bool { a.word == b.word && a.sentence == b.sentence }
+
+    public static func words(of script: NarrationScript) -> [Int: [(range: Range<Int>, index: Int)]] {
+        var out: [Int: [(range: Range<Int>, index: Int)]] = [:]
+        for (i, w) in script.words.enumerated() {
+            if let l = w.location { out[l.block, default: []].append((l.range, i)) }
+        }
+        return out
+    }
+
+    public init(script: NarrationScript, current: Int?, words: [Int: [(range: Range<Int>, index: Int)]]) {
+        self.words = words
+        guard let current, script.words.indices.contains(current) else { word = nil; sentence = [:]; return }
+        word = script.words[current].location
+        var s: [Int: Range<Int>] = [:]
+        for w in script.words[script.sentences[script.words[current].sentence]] {
+            guard let l = w.location else { continue }
+            let r = s[l.block] ?? l.range
+            s[l.block] = min(r.lowerBound, l.range.lowerBound)..<max(r.upperBound, l.range.upperBound)
+        }
+        sentence = s
+    }
 }

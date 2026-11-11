@@ -13,12 +13,20 @@ public protocol BookmarkCoding: Sendable {
 /// process (tests) macOS still creates/resolves them, they just grant nothing extra.
 public struct SecurityScopedBookmarkCoding: BookmarkCoding {
     public init() {}
+    #if os(macOS)
+    private static let creation: URL.BookmarkCreationOptions = [.withSecurityScope]
+    private static let resolution: URL.BookmarkResolutionOptions = [.withSecurityScope]
+    #else
+    // iOS has no app-scoped bookmarks: a plain bookmark, with access granted by start/stopAccessing (ticket 13 replaces this).
+    private static let creation: URL.BookmarkCreationOptions = []
+    private static let resolution: URL.BookmarkResolutionOptions = []
+    #endif
     public func makeBookmark(for url: URL) throws -> Data {
-        try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        try url.bookmarkData(options: Self.creation, includingResourceValuesForKeys: nil, relativeTo: nil)
     }
     public func resolve(_ data: Data) throws -> (url: URL, isStale: Bool) {
         var stale = false
-        let url = try URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
+        let url = try URL(resolvingBookmarkData: data, options: Self.resolution, relativeTo: nil, bookmarkDataIsStale: &stale)
         return (url, stale)
     }
     public func startAccessing(_ url: URL) -> Bool { url.startAccessingSecurityScopedResource() }

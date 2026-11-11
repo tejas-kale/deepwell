@@ -282,37 +282,3 @@ final class NarrationPlayer {
         }
     }
 }
-
-// MARK: Highlight
-
-/// What the reader marks while narration plays: the word, and the sentence around it, per block.
-struct NarrationOverlay: Equatable {
-    var word: WordLocation?
-    /// Block index -> `Character` range of the current sentence within that block.
-    var sentence: [Int: Range<Int>]
-    /// Block index -> (range, global word index) of every narrated word, for click-to-seek.
-    var words: [Int: [(range: Range<Int>, index: Int)]]
-
-    static func == (a: Self, b: Self) -> Bool { a.word == b.word && a.sentence == b.sentence }
-
-    static func words(of script: NarrationScript) -> [Int: [(range: Range<Int>, index: Int)]] {
-        var out: [Int: [(range: Range<Int>, index: Int)]] = [:]
-        for (i, w) in script.words.enumerated() {
-            if let l = w.location { out[l.block, default: []].append((l.range, i)) }
-        }
-        return out
-    }
-
-    init(script: NarrationScript, current: Int?, words: [Int: [(range: Range<Int>, index: Int)]]) {
-        self.words = words
-        guard let current, script.words.indices.contains(current) else { word = nil; sentence = [:]; return }
-        word = script.words[current].location
-        var s: [Int: Range<Int>] = [:]
-        for w in script.words[script.sentences[script.words[current].sentence]] {
-            guard let l = w.location else { continue }
-            let r = s[l.block] ?? l.range
-            s[l.block] = min(r.lowerBound, l.range.lowerBound)..<max(r.upperBound, l.range.upperBound)
-        }
-        sentence = s
-    }
-}
