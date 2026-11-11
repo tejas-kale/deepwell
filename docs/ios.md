@@ -120,7 +120,8 @@ the team, the app group, the iCloud container and the embedded profile, then val
 
 ## Not verified
 
-No simulator runtime is installed on this Mac, so only what is listed above has run. Still unchecked:
+No simulator runtime is installed on this Mac, so only what is listed above has run. Pending (the user will test these
+in everyday use and report back):
 
 1. done on one device shows on the other within a sync cycle;
 2. reading on both devices then syncing leaves no conflict files and keeps the furthest progress;
