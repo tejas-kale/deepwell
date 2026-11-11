@@ -34,6 +34,14 @@ You do these yourself, once:
 
 ## Releasing a build
 
+The one-step way is `scripts/ship.sh`. It checks that Xcode's account is visible to xcodebuild, then runs
+`release.sh` for iOS (bumping the build number) and for the Mac (`--keep-build`, same number). It commits the bumped
+`project.yml` (`[skip ci]`) and pushes. `--platform ios|mac` ships one platform only, and `--no-push` skips the push.
+If a run fails before uploading, the bump stays uncommitted, and the script says how to retry with `--keep-build`. A
+build rejected in processing has used up its number, so that bump is committed. Logs: `build/release/ship-<platform>.log`.
+
+The individual steps:
+
 ```sh
 scripts/release.sh                 # bump CURRENT_PROJECT_VERSION, archive, export, validate, upload
 scripts/release.sh --export-only   # stop after a locally checked .pkg (no API key needed)
