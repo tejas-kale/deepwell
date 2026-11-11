@@ -12,8 +12,11 @@ settings:
     SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "2"
     ENABLE_HARDENED_RUNTIME: YES
+    # macOS app extensions default to NO; TestFlight rejects any bundle without embedded.provisionprofile
+    # (ITMS-90889), so make automatic signing provision the app and both extensions.
+    PROVISIONING_PROFILE_REQUIRED: YES
 packages:
   DeepwellCore:
     path: Packages/DeepwellCore

@@ -12,8 +12,10 @@
 	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key><string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSPrincipalClass</key><string>NSApplication</string>
+	<key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
 	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes podcast and video audio on this Mac, so you can read items that have no published transcript.</string>
 	<key>DeepwellAppGroup</key><string>$(TeamIdentifierPrefix)dev.deepwell</string>
+	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

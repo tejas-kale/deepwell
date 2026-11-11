@@ -12,6 +12,7 @@
 	<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>DeepwellAppGroup</key><string>$(TeamIdentifierPrefix)dev.deepwell</string>
+	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key><string>com.apple.Safari.web-extension</string>

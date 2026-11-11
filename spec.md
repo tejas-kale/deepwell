@@ -20,24 +20,26 @@ of topic bundles so you can go deep on one topic per week.
 ## Platform
 
 - SwiftUI app for macOS. Targets: the app, a Safari Web Extension and a Share Extension.
-- Built with a free Apple ID (personal team), locally signed. No paid developer account yet.
-  *Superseded by ticket 12: moving to a paid account and TestFlight (see iPhone/iPad companion below).*
+- **Signing (ticket 12, 2026-11-11):** paid Apple Developer account, team NDMG62GXZA (individual, same ID as the
+  former free team). Installed from TestFlight. `scripts/release.sh` archives, exports (`app-store-connect`),
+  validates and uploads (see docs/install.md). `scripts/install.sh` is kept only as a local development-signed fallback.
+  The app group stays `$(TeamIdentifierPrefix)dev.deepwell`, because macOS accepts team-prefixed groups in
+  App Store/TestFlight signing without registering them in the portal, and it keeps the capture inbox where it
+  was (App Store Connect validation of this is still pending). The iOS app (ticket 15) gets its own `group.` id. Every bundle sets `PROVISIONING_PROFILE_REQUIRED = YES`,
+  because macOS extensions otherwise ship without a profile, which TestFlight rejects (ITMS-90889).
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
-  extensions not signed with a paid account. Ticket 1 tests this before anything else gets built.
-- **UNVERIFIED — needs manual test.** Ticket 01 is built but nobody has run it in Safari (the build was done
-  headless; "Allow Unsigned Extensions" cannot be driven from there). No result is claimed. To settle the risk:
-  1. `brew install xcodegen`, then `xcodegen generate`; open `Deepwell.xcodeproj`; in Signing & Capabilities
-     pick your personal team for both targets (or set `DEVELOPMENT_TEAM` in `Config/Local.xcconfig`).
-     If Xcode rejects the app-group entitlement for a personal team, note that: the capture hand-off depends on it.
-  2. Run the `Deepwell` scheme. Choose a library folder (try the default iCloud Drive/Deepwell).
-  3. Safari > Settings > Advanced: tick "Show features for web developers". Develop > Allow Unsigned Extensions
-     (enter password). Safari > Settings > Extensions: enable Deepwell, allow it on all websites.
-  4. Open an article, click the Deepwell toolbar button, then press Ctrl+Shift+S on another. Expect a toast and a
+  extensions not signed with a paid account. Ticket 12 moves signing to the paid account to settle this.
+- **UNVERIFIED (2026-11-11), needs a manual test of the TestFlight build.** The export is signed with Apple
+  Distribution (team NDMG62GXZA), and the app and both extensions carry Mac Team Store profiles. Nobody has yet
+  installed it from TestFlight or run it in Safari. No result is claimed. To settle the risk:
+  1. Install Deepwell from the TestFlight app. Developer > "Allow Unsigned Extensions" must stay **off**.
+  2. Safari > Settings > Extensions: check that exactly **one** Deepwell is listed. Enable it and allow it on all websites.
+     If two are listed, run `scripts/unregister-stale-builds.sh` and restart Safari.
+  3. Open an article, click the Deepwell toolbar button, then press Ctrl+Shift+S on another. Expect a toast and a
      new .md file in the library folder (check frontmatter and body). Repeat on a page behind a login.
-  5. Quit Safari (Cmd+Q) and reopen. Record: is the extension still enabled, is "Allow Unsigned Extensions"
-     reset (it is expected to be), and does saving still work after re-ticking it?
-  6. Record the outcome here and, if re-enabling is required each restart, the workaround. Also record whether the
-     keyboard shortcut fires (`_execute_action` -> `action.onClicked` in Safari is assumed, not confirmed).
+  4. Quit Safari (Cmd+Q) and reopen. Record whether the extension is still enabled and saving still works.
+  5. Record the outcome here. Also record whether the keyboard shortcut fires (`_execute_action` ->
+     `action.onClicked` in Safari is assumed, not confirmed).
 
 ## Capture
 
@@ -97,7 +99,8 @@ Heavy jobs stay on the Mac.
 
 - **Platform:** one iOS target for iPhone and iPad, iOS 26 minimum. iPad uses a NavigationSplitView close to the Mac layout.
 - **Signing and distribution:** paid Apple Developer account. Every device, Mac included, installs builds from
-  TestFlight through one archive-and-upload script. That replaces `scripts/install.sh`'s copy into /Applications.
+  TestFlight through one archive-and-upload script (`scripts/release.sh`, Mac since ticket 12). `scripts/install.sh`
+  remains only as a local fallback.
 - **Library:** moves from the user-picked `iCloud Drive/Deepwell` folder into the app's own iCloud container
   (public, so Finder still shows it as `iCloud Drive/Deepwell`). The Mac's folder picker goes away. Both apps
   use `NSMetadataQuery` for changes and download state. If iCloud is signed out, both use a local fallback folder.
@@ -143,6 +146,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 | 08 Magazine import | Built, UI unverified | `docs/magazines.md`. Fixtures generated at test time, not real magazines; splitting prompt never run against the real API; drop, Dock, Share Extension and the reader jump never run. Shares one Share Extension target with 07 (merged by hand; combined activation rule untested). |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
 | 10 Monday schedule | Removed | Replaced by on-demand building; scheduler, notification and their tests deleted. |
+| 12 Paid account and TestFlight | Built, partly unverified | `docs/install.md`, `scripts/release.sh`. Signed App Store export checked locally (2026-11-11). Not yet validated or uploaded (no API key), and the TestFlight install and Safari restart test are not done (see Platform → Risk). |
 
 Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.

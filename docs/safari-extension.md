@@ -43,9 +43,8 @@ xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -derivedDataPath build/d
   file to `<app group>/Inbox`, then opens `deepwell://inbox` to wake the app. The app drains the inbox (on launch,
   on that URL, and every 2 s) and writes Markdown into the library through its bookmark. If the library is not
   chosen or the app is not running, captures stay queued; nothing is lost. Corrupt files move to `Inbox/rejected/`.
-  App-group ID is `$(TeamIdentifierPrefix)dev.deepwell`; whether a free personal team may use it is UNVERIFIED.
-  Fallback if not: have the extension handler itself write to a fixed folder via a
-  `com.apple.security.temporary-exception.files.absolute-path.read-write` entitlement (fine for local builds).
+  App-group ID is `$(TeamIdentifierPrefix)dev.deepwell` (team NDMG62GXZA). Ticket 12 keeps it for
+  TestFlight signing (see spec.md Platform), and the paid-team export signs all three bundles with it.
 - **Shortcut:** Ctrl+Shift+S (not Cmd+Shift+S, Safari's Save As). Declared as `_execute_action`.
 - Saving the same URL twice creates two files (dedupe is a later concern).
 

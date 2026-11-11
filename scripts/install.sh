@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Build a signed Release of Deepwell and install it to /Applications.
+# FALLBACK ONLY. Deepwell normally installs from TestFlight (scripts/release.sh, docs/install.md). Use this to try a
+# local change on this Mac without uploading: it builds Release, signed for development with the paid team, and
+# replaces /Applications/Deepwell.app, including a TestFlight install. Same bundle id, team and app group, so the
+# capture inbox is shared; whether settings and the library bookmark survive the switch between TestFlight and local
+# signing is not verified (worst case: pick the library folder again). Reinstall from TestFlight to go back.
 #   scripts/install.sh          build, quit the running Deepwell, replace /Applications/Deepwell.app, launch it
-#   scripts/install.sh --zip    also write build/release/Deepwell-<version>.zip (to copy to another Mac you own)
-# Needs: xcodegen, Xcode signed in to your Apple ID, DEVELOPMENT_TEAM in Config/Local.xcconfig.
+#   scripts/install.sh --zip    also write build/local/Deepwell-<version>.zip (runs only on Macs registered to the team)
+# Needs: xcodegen, Xcode signed in to the team, DEVELOPMENT_TEAM in Config/Local.xcconfig, this Mac registered
+# (see "One-time setup" in docs/install.md).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-DERIVED=build/release
+DERIVED=build/local
 APP="$DERIVED/Build/Products/Release/Deepwell.app"
 DEST=/Applications/Deepwell.app
-LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 echo "==> Generating project"
 xcodegen generate --quiet
@@ -38,20 +42,8 @@ fi
 echo "==> Installing $VERSION to $DEST"
 rm -rf "$DEST"
 ditto "$APP" "$DEST"
-# Unregister every other Deepwell build (DerivedData, build/, old worktrees) so Safari lists one extension.
-shopt -s nullglob
-"$LSREGISTER" -dump 2>/dev/null \
-  | sed -nE 's/^path: +(.*\/Deepwell\.app) \(0x[0-9a-f]+\)$/\1/p' \
-  | { grep -vxF "$DEST" || true; } \
-  | while read -r stale; do
-      for ext in "$stale"/Contents/PlugIns/*.appex; do pluginkit -r "$ext" 2>/dev/null || true; done
-      "$LSREGISTER" -u "$stale" 2>/dev/null || true
-    done
-shopt -u nullglob
-# Make the installed copy the one that handles deepwell:// and provides the Safari/Share extensions.
-"$LSREGISTER" -f "$DEST"
-pluginkit -a "$DEST/Contents/PlugIns/DeepwellSafariExtension.appex" 2>/dev/null || true
-pluginkit -a "$DEST/Contents/PlugIns/DeepwellShareExtension.appex" 2>/dev/null || true
+# Make the installed copy the only one that handles deepwell:// and provides the Safari/Share extensions.
+scripts/unregister-stale-builds.sh "$DEST"
 
 open "$DEST"
 echo "==> Done. Enable the extension in Safari > Settings > Extensions if it is not already on."
