@@ -7,6 +7,7 @@ import DeepwellMenu
 import DeepwellMagazines
 import DeepwellCuration
 import DeepwellUI
+import DeepwellNarration
 
 /// The phone's view of the library: the per-device SQLite index (Application Support, built from the container and
 /// kept current by `LibraryWatcher`'s NSMetadataQuery) and the Mac's pick from `.deepwell/menu.json` (read only).
@@ -34,6 +35,8 @@ final class FocusLibrary {
     private(set) var isIndexing = true
     /// Ticket 20: issues handed to the Mac (a `.pending.json` marker) that have no articles yet: "Splitting on Mac".
     private(set) var pendingIssues: [PendingIssue] = []
+    /// Ticket 17: how each Current Focus item's files stand on this device (kept downloaded for offline use), by item id.
+    private(set) var pinStates: [String: OfflinePins.State] = [:]
 
     @ObservationIgnored private var byID: [String: IndexedItem] = [:]
     @ObservationIgnored private var allItems: [Item] = []
@@ -43,6 +46,8 @@ final class FocusLibrary {
     @ObservationIgnored private var menuPresenter: SharedFilePresenter?
     @ObservationIgnored private var syncTask: Task<Void, Never>?
     @ObservationIgnored private var focusTask: Task<Void, Never>?
+    @ObservationIgnored private var pinTask: Task<Void, Never>?
+    @ObservationIgnored private var pinned: [OfflinePins.Pin] = []
 
     @ObservationIgnored private let onSynced: @MainActor () -> Void
 
@@ -87,7 +92,7 @@ final class FocusLibrary {
     func stop() {
         watcher?.stop(); watcher = nil
         menuPresenter?.stop(); menuPresenter = nil
-        syncTask?.cancel(); focusTask?.cancel()
+        syncTask?.cancel(); focusTask?.cancel(); pinTask?.cancel()
     }
 
     func entry(id: String) -> IndexedItem? { byID[id] }
@@ -97,6 +102,7 @@ final class FocusLibrary {
     func refresh() {
         scheduleSync()
         loadFocus()
+        pinned = []   // ask iCloud again: it may have evicted something while the app was away
     }
 
     /// The reader wrote status or progress: show it in the queue now, without waiting for the watcher.
@@ -144,6 +150,36 @@ final class FocusLibrary {
             let queue = await Task.detached { CurrentFocus.load(library: folder, items: []).queue }.value
             guard let self, !Task.isCancelled else { return }
             self.focus = CurrentFocus(queue: queue, items: self.allItems)
+            self.pinFocus()
+        }
+    }
+
+    /// Offline pinning (ticket 17): when the queue (menu.json) or the items' paths change, asks iCloud to download each
+    /// queue item's `.md` and `.narration/` folder, then checks back (3 s, backing off to a minute) until all are local,
+    /// asking again for anything still not downloading. iOS has no API to stop it evicting them later; each change,
+    /// foreground and pull to refresh asks again.
+    private func pinFocus() {
+        let pins = OfflinePins.pins(queue: focus?.queue, relativePaths: byID.mapValues(\.relativePath), library: folder)
+        guard pins != pinned else { return }
+        pinned = pins
+        pinTask?.cancel()
+        guard !pins.isEmpty else { pinStates = [:]; return }
+        pinTask = Task { [weak self] in
+            var delay: Double = 3
+            var ask = pins
+            while !Task.isCancelled {
+                let request = ask
+                let states = await Task.detached { () -> [String: OfflinePins.State] in
+                    request.forEach { OfflinePins.request($0) }
+                    return Dictionary(pins.map { ($0.itemID, OfflinePins.state(of: $0)) }, uniquingKeysWith: { a, _ in a })
+                }.value
+                guard let self, !Task.isCancelled else { return }
+                self.pinStates = states
+                ask = pins.filter { states[$0.itemID] == .notDownloaded }
+                guard states.values.contains(where: { $0 != .downloaded }) else { return }
+                try? await Task.sleep(for: .seconds(delay))
+                delay = min(60, delay * 2)
+            }
         }
     }
 
@@ -156,6 +192,7 @@ final class FocusLibrary {
             inProgress = list.filter { $0.item.status == .reading }
             unread = list.filter { $0.item.status == .unread }
             focus = focus?.updating(items: allItems)
+            pinFocus()
         } catch {
             errorMessage = "Query failed: \(error.localizedDescription)"
         }

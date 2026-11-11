@@ -109,5 +109,6 @@ private extension View {
 
 @MainActor
 private func reader(_ library: FocusLibrary, _ entry: IndexedItem) -> some View {
-    MobileReaderView(entry: entry, url: library.fileURL(for: entry), onChanged: { library.itemChanged() })
+    MobileReaderView(entry: entry, url: library.fileURL(for: entry), libraryFolder: library.folder,
+                     onChanged: { library.itemChanged() })
 }

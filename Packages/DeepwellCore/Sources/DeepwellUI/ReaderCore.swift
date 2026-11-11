@@ -2,6 +2,8 @@ import SwiftUI
 import DeepwellModel
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 private struct Metrics: Equatable { var offset: CGFloat = 0; var content: CGFloat = 0 }
@@ -137,18 +139,55 @@ private struct ScrollViewFinder: NSViewRepresentable {
     }
 }
 #else
-/// Seam: iOS has no follow-along scrolling yet (phone Listen is ticket 17). Programmatic scrolls are dropped and no
-/// user-scroll callback fires, so the reader still restores and reports progress but does not turn pages for narration.
+/// The UIKit scroll view under a SwiftUI `ScrollView` (ticket 17): eased programmatic scrolling for narration
+/// follow-along, and the reader's own drags (the pan gesture beginning) told apart from our scrolls.
 @MainActor
-final class NativeScroller {
+final class NativeScroller: NSObject {
+    weak var scrollView: UIScrollView?
     var onUserScroll: () -> Void = {}
-    func scroll(by dy: CGFloat) {}
+
+    func attach(_ sv: UIScrollView?) {
+        guard let sv, sv !== scrollView else { return }
+        scrollView?.panGestureRecognizer.removeTarget(self, action: #selector(panned(_:)))
+        scrollView = sv
+        sv.panGestureRecognizer.addTarget(self, action: #selector(panned(_:)))
+    }
+
+    @objc private func panned(_ g: UIPanGestureRecognizer) {
+        if g.state == .began { onUserScroll() }
+    }
+
+    /// Scrolls the content by `dy` points (positive: further down the article), clamped, eased.
+    func scroll(by dy: CGFloat) {
+        guard let sv = scrollView, abs(dy) > 4, !sv.isDragging, !sv.isDecelerating else { return }
+        let inset = sv.adjustedContentInset
+        let minY = -inset.top
+        let maxY = max(minY, sv.contentSize.height + inset.bottom - sv.bounds.height)
+        let y = min(max(sv.contentOffset.y + dy, minY), maxY)
+        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]) {
+            sv.contentOffset.y = y
+        }
+    }
 }
 
-private struct ScrollViewFinder: View {
+/// Finds the enclosing `UIScrollView` by walking up from a zero-size view placed in the scrolled content.
+private struct ScrollViewFinder: UIViewRepresentable {
     let scroller: NativeScroller
     let onUserScroll: () -> Void
-    var body: some View { Color.clear }
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isUserInteractionEnabled = false
+        return v
+    }
+    func updateUIView(_ v: UIView, context: Context) {
+        scroller.onUserScroll = onUserScroll
+        DispatchQueue.main.async { scroller.attach(Self.enclosingScrollView(of: v)) }
+    }
+    private static func enclosingScrollView(of v: UIView) -> UIScrollView? {
+        var s = v.superview
+        while let view = s, !(view is UIScrollView) { s = view.superview }
+        return s as? UIScrollView
+    }
 }
 #endif
 

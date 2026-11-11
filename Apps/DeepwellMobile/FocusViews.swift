@@ -3,6 +3,7 @@ import DeepwellUI
 import DeepwellModel
 import DeepwellIndex
 import DeepwellMenu
+import DeepwellNarration
 
 /// What the iPad sidebar (and the iPhone tab bar) offers. Library (browse, filter, search, tags) is ticket 19.
 enum MobileSection: String, Hashable, CaseIterable, Identifiable {
@@ -99,6 +100,7 @@ struct FocusQueueList: View {
                     if let type = entry?.item.type { Image(systemName: type.symbol) }
                     Text(Self.minutes(row.entry.minutes))
                     if row.status == .reading { Text("· \(Int(row.progress * 100))%") }
+                    if let pin = library.pinStates[row.entry.itemID] { PinBadge(state: pin) }
                 }
                 .font(.caption).foregroundStyle(.secondary)
                 if entry?.item.needsTranscript == true { TranscriptPendingLabel() }
@@ -196,5 +198,25 @@ struct TranscriptPendingLabel: View {
     var body: some View {
         Label(TranscriptPending.title, systemImage: "waveform.badge.ellipsis")
             .font(.caption).foregroundStyle(Ayu.accent)
+    }
+}
+
+/// Ticket 17: whether a Current Focus item is downloaded for offline reading and listening.
+struct PinBadge: View {
+    let state: OfflinePins.State
+
+    var body: some View {
+        switch state {
+        case .downloaded:
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Ayu.green)
+                .accessibilityLabel("Downloaded")
+        case .downloading:
+            Image(systemName: "arrow.down.circle.dotted").foregroundStyle(Ayu.accent)
+                .symbolEffect(.pulse)
+                .accessibilityLabel("Downloading")
+        case .notDownloaded:
+            Image(systemName: "icloud").foregroundStyle(.secondary)
+                .accessibilityLabel("Not downloaded yet")
+        }
     }
 }

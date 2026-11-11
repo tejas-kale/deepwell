@@ -19,6 +19,8 @@ to 6.2 would also switch every target to the Swift 6 language mode.
 | `Apps/Deepwell/TagsView.swift` | `TagsView.swift` | `TagsView(model:)`, `TagsModel` protocol |
 | `DeepwellTranscription/TranscriptionStatusView.swift` | `TranscriptionStatusView.swift` | `TranscriptionStatusView` (not used by the app yet) |
 | `Apps/Deepwell/PodcastPlayerView.swift` (ticket 15) | `PodcastPlayerView.swift` | `PodcastPlayerView(document:)`; timestamps use `linkButtonStyle()` |
+| `Apps/Deepwell/NarrationPlayer.swift` (ticket 17) | `NarrationPlayer.swift` | `NarrationPlayer(session:title:)`, `start/toggle/pause/resume/stop/retry`, `play(fromWord:)`, sentence steps, `skip(by:)`, `rate`, `state`, `currentWord`, `onProgress`, `onFinished` |
+| `ListenBar` and the "Jump to current" pill (were in `Apps/Deepwell/ReaderView.swift`, ticket 17) | `ListenBar.swift` | `ListenOverlay(player:following:)` (pill + bar), `ListenBar(player:)` |
 | `ItemRow`, `StatusBadge`, `FlowLayout` (were in `Apps/Deepwell/LibraryView.swift`, ticket 19) | `ItemRow.swift` | `ItemRow(entry:typeSymbol:)` (each app passes its own type symbol), `StatusBadge(status:)`, `FlowLayout(spacing:)` |
 
 Everything else is `internal`. `NarrationMark`, `BlockView`, `SpokenWordYKey`, `readerContentSpace`, `linkButtonStyle()` and
@@ -36,8 +38,8 @@ DeepwellPodcasts (`Item.audioURL`, since ticket 15).
 
 ## What stays in `Apps/Deepwell`
 
-`ReaderView` (the shell: loading/saving, toolbar, status picker, Listen button, issue toggle) and `ListenBar`,
-`NarrationPlayer` (AVAudioPlayer playback; phone Listen is ticket 17), `PaneFocus`, `MenuView`/`MenuController`, Kindle,
+`ReaderView` (the shell: loading/saving, toolbar, status picker, Listen button, issue toggle; it builds the
+`NarrationSession` with the Mac's `OpenRouterAccount` and `Preferences`), `PaneFocus`, `MenuView`/`MenuController`, Kindle,
 Settings, `Preferences`, `IssueReaderView` (PDFKit/WebKit `NSViewRepresentable`), `LibraryView`,
 `LibraryModel`, `AppModel` and the controllers.
 
@@ -50,7 +52,9 @@ Settings, `Preferences`, `IssueReaderView` (PDFKit/WebKit `NSViewRepresentable`)
 | `ArticleHeader` open | `openInSafari` (NSWorkspace, Safari specifically) | `@Environment(\.openURL)` |
 | `ArticleHeader` hover | pointing-hand `NSCursor` on the title | none |
 | `TagsView` (ticket 19) | `.frame(minWidth: 420, minHeight: 420)`; actions in the context menu | no minimum frame (it is a sheet on the phone); context menu (long press) plus swipe actions: Rename/Accept leading, Delete trailing |
-| `NativeScroller` / `ScrollViewFinder` | finds the `NSScrollView`, eased scroll for narration follow, live-scroll detection | **stub**: `scroll(by:)` does nothing and no user-scroll callback fires. Restore and progress still work; following the spoken word is for ticket 17 |
+| `NativeScroller` / `ScrollViewFinder` | finds the `NSScrollView`, eased scroll for narration follow, live-scroll detection | ticket 17: finds the `UIScrollView` by walking up from a zero-size view in the content; eased `contentOffset` change, clamped to the insets and skipped while dragging/decelerating; the pan gesture's `.began` is the user scroll |
+| `NarrationPlayer` (ticket 17) | ticket 11's Now Playing (`playbackState`, rate, progress) and next/previous track | `AVAudioSession` `.playback`/`.spokenAudio`/`.longFormAudio`, interruptions and route changes, ±15 s skip and rate commands, elapsed/duration and "Buffering…" on the lock screen, `beginBackgroundTask` while a chunk is generated, 3 chunks ahead instead of 2 |
+| `ListenBar` (ticket 17) | `.menuStyle(.borderlessButton)`, callout font | default menu style, body font, more padding, error as an icon |
 | `YouTubeEmbedView` | `NSViewRepresentable` around `WKWebView` | `UIViewRepresentable`, plus `allowsInlineMediaPlayback` |
 
 Two seams outside the module were needed so DeepwellUI's dependencies compile for iOS (both via DeepwellIndex/Tagging →

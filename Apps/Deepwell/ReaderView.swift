@@ -109,16 +109,7 @@ struct ReaderView: View {
             .frame(maxWidth: .infinity)
         }
         .overlay(alignment: .bottom) {
-            if let n {
-                VStack(spacing: 8) {
-                    if !following {
-                        Button { following = true } label: { Label("Jump to current", systemImage: "arrow.down.to.line") }
-                            .buttonStyle(.borderedProminent).controlSize(.small).tint(Ayu.accent)
-                    }
-                    ListenBar(player: n)
-                }
-                .padding(12)
-            }
+            if let n { ListenOverlay(player: n, following: $following) }
         }
     }
 
@@ -179,60 +170,5 @@ struct ReaderView: View {
         if s == .unread { lastProgress = 0 }
         if s == .done { lastProgress = 1 }
         if (try? ItemFileUpdater.setStatus(s, at: url)) != nil { onChanged() }
-    }
-}
-
-/// Bottom bar while listening: play/pause, sentence back and forward, speed, progress, and generation or error state.
-struct ListenBar: View {
-    let player: NarrationPlayer
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Button { player.previousSentence() } label: { Image(systemName: "backward.end.fill") }
-                .help("Previous sentence")
-            Button { player.toggle() } label: {
-                Image(systemName: player.state == .playing ? "pause.fill" : "play.fill").frame(width: 18)
-            }
-            .help(player.state == .playing ? "Pause" : "Play")
-            Button { player.nextSentence() } label: { Image(systemName: "forward.end.fill") }
-                .help("Next sentence")
-
-            ProgressView(value: player.progress).frame(minWidth: 80)
-
-            if let error = player.error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Ayu.red).lineLimit(1).truncationMode(.tail)
-                    .help(error)
-                Button("Retry") { player.retry() }
-            } else if player.state == .loading || player.state == .waiting {
-                ProgressView().controlSize(.small)
-                Text(player.state == .waiting ? "Generating…" : "Loading…").foregroundStyle(.secondary)
-            } else if player.isGenerating {
-                Image(systemName: "waveform").foregroundStyle(.secondary).help("Generating audio ahead")
-            }
-
-            Menu {
-                ForEach(NarrationPlayer.speeds, id: \.self) { s in
-                    Button { player.rate = s } label: {
-                        if s == player.rate { Label(Self.speed(s), systemImage: "checkmark") } else { Text(Self.speed(s)) }
-                    }
-                }
-            } label: { Text(Self.speed(player.rate)).monospacedDigit() }
-            .menuStyle(.borderlessButton).fixedSize()
-            .help("Playback speed")
-
-            Button { player.stop() } label: { Image(systemName: "xmark") }.help("Stop listening")
-        }
-        .buttonStyle(.borderless)
-        .font(.callout)
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .frame(maxWidth: 640)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.quaternary))
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-    }
-
-    static func speed(_ s: Float) -> String {
-        s == s.rounded() ? "\(Int(s))×" : String(format: "%g×", s)
     }
 }

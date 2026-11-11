@@ -276,7 +276,7 @@ final class NarrationSessionTests: XCTestCase {
         let s1 = session(transport: SpeechStub())
         await s1.open()
         s1.setPosition(word: 17)
-        XCTAssertEqual((try manifest()["position"] as? [String: Int])?["word"], 17)
+        XCTAssertEqual((try manifest()["position"] as? [String: Any])?["word"] as? Int, 17)
         let s2 = session(transport: SpeechStub())
         await s2.open()
         XCTAssertEqual(s2.position, 17)

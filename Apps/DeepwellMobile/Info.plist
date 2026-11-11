@@ -13,9 +13,12 @@
 	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key><true/>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
-	<!-- Required because DeepwellUI links DeepwellTranscription (SFSpeechRecognizer), even though the phone never
-	     transcribes (spec: the Mac does). Without it App Store Connect processing rejects the build (ITMS-90683). -->
-	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes audio on your Mac. On this device it only reads the transcripts your Mac made.</string>
+	<!-- Speech: the phone times each narrated word on device (ticket 17: SpeechAnalyzer, falling back to
+	     SFSpeechRecognizer); podcasts are still transcribed on the Mac. Without it processing rejects the build (ITMS-90683). -->
+	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell recognises its own narration on this device to highlight each word as it is read. Podcasts are transcribed on your Mac.</string>
+	<!-- Ticket 17 links MediaPlayer (Now Playing and lock-screen controls only; no media library access). Declared so
+	     a static scan of the linked framework can't reject the build for a missing purpose string. -->
+	<key>NSAppleMusicUsageDescription</key><string>Deepwell doesn't read your music library. It only shows what it is reading aloud on the lock screen.</string>
 	<key>DeepwellAppGroup</key><string>group.com.tejaskale.deepwell</string>
 	<!-- Ticket 16: the keychain-access-groups entry both apps carry; synced API keys live there. -->
 	<key>DeepwellKeychainGroup</key><string>$(AppIdentifierPrefix)com.tejaskale.deepwell</string>
@@ -26,6 +29,8 @@
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
+		<!-- Ticket 17: Listen keeps playing (and generating ahead) with the screen locked. -->
+		<string>audio</string>
 		<string>processing</string>
 	</array>
 	<key>UILaunchScreen</key><dict/>

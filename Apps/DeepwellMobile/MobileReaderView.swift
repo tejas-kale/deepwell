@@ -2,14 +2,27 @@ import SwiftUI
 import DeepwellUI
 import DeepwellModel
 import DeepwellIndex
+import DeepwellNarration
+import DeepwellTranscription
 
 /// The iOS reader shell around DeepwellUI's views: downloads the item if iCloud evicted it, shows articles and
 /// magazine articles (article text), YouTube (embed plus transcript) and podcasts (player plus transcript), and writes
 /// status and scroll progress back through `ItemFileUpdater` with the Mac reader's debounce (`ReadingState`).
+/// Ticket 17: articles and magazine articles can be listened to, as on the Mac (DeepwellUI's `NarrationPlayer`,
+/// `ListenOverlay`, word highlight and tap-to-seek); playback carries on with the screen locked.
 struct MobileReaderView: View {
     let entry: IndexedItem
     let url: URL
+    /// Library root: where the shared pronunciations.yml lives.
+    let libraryFolder: URL
     let onChanged: () -> Void
+
+    @Environment(MobileAppModel.self) private var model
+    @State private var narration: NarrationPlayer?
+    @State private var overlayWords: [Int: [(range: Range<Int>, index: Int)]] = [:]
+    /// Auto-scroll follows the spoken word until the reader scrolls by hand.
+    @State private var following = true
+    @State private var showKeyHint = false
 
     enum Phase { case loading, ready(ItemDocument), failed(String) }
     @State private var phase = Phase.loading
@@ -38,6 +51,14 @@ struct MobileReaderView: View {
         .navigationTitle(entry.item.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if case .ready(let doc) = phase, canListen(doc) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { listen() } label: {
+                        Label(narration?.state == .playing ? "Pause" : "Listen",
+                              systemImage: narration?.state == .playing ? "pause.fill" : "headphones")
+                    }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Picker("Status", selection: Binding(get: { status }, set: setStatus)) {
@@ -52,22 +73,67 @@ struct MobileReaderView: View {
             }
         }
         .task { await load() }
-        .onDisappear { saveTask?.cancel(); flush() }
+        .alert("Add an OpenRouter key to listen", isPresented: $showKeyHint) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Listening uses your OpenRouter key. Add it in Settings here or on your Mac (it syncs through iCloud Keychain).")
+        }
+        // Leaving the article stops listening (locking the screen doesn't: that isn't a disappear).
+        .onDisappear { narration?.stop(); saveTask?.cancel(); flush() }
         // iOS may suspend or end the app in the background: write pending progress before that.
         .onChange(of: scenePhase) { if scenePhase != .active { saveTask?.cancel(); flush() } }
     }
 
     private var isReady: Bool { if case .ready = phase { true } else { false } }
 
+    private func canListen(_ doc: ItemDocument) -> Bool {
+        doc.item.type == .article || doc.item.type == .magazineArticle
+    }
+
+    @ViewBuilder
     private func article(_ doc: ItemDocument) -> some View {
-        ScrollProgressView(initialProgress: doc.item.progress, onProgress: { p in progressChanged(p) }) {
+        let n = narration?.isActive == true ? narration : nil
+        let overlay = n.map { NarrationOverlay(script: $0.session.script, current: $0.currentWord, words: overlayWords) }
+        ScrollProgressView(initialProgress: doc.item.progress,
+                           following: n != nil && following,
+                           onUserScroll: { if n != nil { following = false } },
+                           onProgress: { p in progressChanged(p) }) {
             VStack(alignment: .leading, spacing: 20) {
                 ArticleHeader(item: doc.item)
-                MarkdownBody(blocks: blocks, overlay: nil) { _ in }   // Listen on the phone is ticket 17.
+                MarkdownBody(blocks: blocks, overlay: overlay) { w in following = true; narration?.play(fromWord: w) }
             }
             .padding(.horizontal, 20).padding(.vertical, 24)
+            .padding(.bottom, n == nil ? 0 : 90)
             .frame(maxWidth: 700, alignment: .leading)
             .frame(maxWidth: .infinity)
+        }
+        .overlay(alignment: .bottom) {
+            if let n { ListenOverlay(player: n, following: $following) }
+        }
+    }
+
+    /// Listen / Pause. The first tap builds the session (same `.narration/` folder and chunk keys as the Mac, so audio
+    /// made there is reused) and resumes from the position saved on either device.
+    private func listen() {
+        if let narration { narration.toggle(); return }
+        guard case .ready(let doc) = phase else { return }
+        model.settings.reloadKeys()
+        guard model.settings.openRouter.hasKey else { showKeyHint = true; return }
+        let session = NarrationSession(
+            item: doc.item, body: doc.body, folder: NarrationSession.folder(forItemFile: url),
+            settings: model.settings.narration,
+            pronunciations: PronunciationStore(libraryFolder: libraryFolder).merged(),
+            keys: model.settings.openRouter.store,
+            transcriber: NarrationTranscribers.bestAvailable(locale: Locale(identifier: "en-US")))
+        let player = NarrationPlayer(session: session, title: doc.item.title)
+        player.onProgress = { p in progressChanged(p) }
+        player.onFinished = { setStatus(.done) }
+        overlayWords = NarrationOverlay.words(of: session.script)
+        narration = player
+        following = true
+        Task {
+            await session.open()
+            player.start()
         }
     }
 

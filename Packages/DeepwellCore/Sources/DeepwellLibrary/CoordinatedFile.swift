@@ -93,6 +93,21 @@ public enum CoordinatedFile {
         if let inner { throw inner }
     }
 
+    /// Read-modify-write of a data file that may not exist yet, under one coordinated write. `transform` gets the
+    /// current bytes (nil when there is no file) and returns what to write, or nil to leave the file untouched.
+    public static func updateData(_ url: URL, _ transform: (Data?) throws -> Data?) throws {
+        var inner: Error?
+        try coordinate { err in
+            NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forMerging, error: &err) { u in
+                do {
+                    let current = FileManager.default.fileExists(atPath: u.path) ? try Data(contentsOf: u) : nil
+                    if let new = try transform(current), new != current { try new.write(to: u, options: .atomic) }
+                } catch { inner = error }
+            }
+        }
+        if let inner { throw inner }
+    }
+
     /// Deletes `url` under coordination.
     public static func delete(_ url: URL, fileManager fm: FileManager = .default) throws {
         var inner: Error?

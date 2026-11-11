@@ -51,7 +51,9 @@ MobileRootView
   │  each a NavigationStack
   └─ regular width (iPad): NavigationSplitView, sidebar → queue → reader
 MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownBody, YouTubeTranscriptView, PodcastPlayerView
-                 └─ ItemFileUpdater.setProgress / setStatus (coordinated read-modify-write)
+                 ├─ ItemFileUpdater.setProgress / setStatus (coordinated read-modify-write)
+                 └─ Listen (ticket 17): NarrationSession (<item>.narration/, shared with the Mac) → NarrationPlayer,
+                    ListenOverlay (DeepwellUI); background audio, lock-screen controls
 ```
 
 - **Library.** `LibraryFolderStore.resolveContainer()` (new) is the iOS resolution: the container or nil, never the
@@ -60,7 +62,7 @@ MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownB
   (`LibraryOpener`, `LegacyLibraryBookmark`) is Mac-only and never runs on iOS.
 - **Index.** The same `LibraryIndex` and `LibrarySync` as the Mac, in the app's own Application Support. The watcher
   requests the download of every evicted `.md` (small files) so the index fills in. Narration folders and `issues/`
-  are not downloaded. Until the first sync finishes, queue rows for items not indexed yet say "Loading from iCloud…".
+  are not downloaded, except for the Current Focus queue's (offline pinning, ticket 17). Until the first sync finishes, queue rows for items not indexed yet say "Loading from iCloud…".
 - **Current Focus.** `CurrentFocus` (DeepwellMenu) reads `<library>/.deepwell/menu.json` through `MenuStore.load()`.
   The read is coordinated, so iCloud downloads an evicted copy first. It never calls `save`, never creates `.deepwell/`,
   and has no `MenuService`/`MenuBuilder`. The queue keeps the Mac's pick order. Each row shows the title, type, length
@@ -73,7 +75,7 @@ MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownB
   Progress re-derives on every index reload, without re-reading the file.
 - **Reader.** Articles and magazine articles (article text only; the PDF/EPUB issue view is Mac-only), YouTube (the
   embed, with link-out as the fallback, plus the transcript) and podcasts (`AVPlayer` plus the timestamped transcript;
-  audio session `.playback`, foreground only). Listen is ticket 17. The progress debounce is the Mac's, now shared as
+  audio session `.playback`, foreground only). Articles and magazine articles can be listened to (ticket 17, below). The progress debounce is the Mac's, now shared as
   `ReadingState.shouldSave` / `saveDelayNanoseconds` (a 1% step, 0.7 s, and always at the end). Pending progress is
   also flushed when the scene leaves `.active`, because iOS may suspend the app. Status is a menu in the toolbar.
 - **Conflicts.** The same `ConflictResolver` as the Mac (ticket 13's merge: furthest status and progress win, tags are
@@ -87,9 +89,11 @@ MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownB
 | DeepwellLibrary | `LibraryFolderStore.resolveContainer()` (new), `ConflictResolver`, `CoordinatedFile` (via the updater and `MenuStore`) | migration types unused |
 | DeepwellIndex | `LibraryIndex`, `LibrarySync`, `LibraryWatcher`, `ItemFileUpdater`, `ReadingState`, `ICloudPlaceholder` | `FolderWatcher` (FSEvents) is macOS-only and unused, since iOS is always in the container |
 | DeepwellMenu | `CurrentFocus` (new), `MenuStore.load`, `QueueProgress` | builder, validator, prompt and `MenuService` are linked but unused |
-| DeepwellUI | `ScrollProgressView`, `ArticleHeader`, `MarkdownBody`, `YouTubeTranscriptView`, `PodcastPlayerView` (moved from the Mac app in this ticket), `Ayu`; since ticket 19 `ItemRow` (with `StatusBadge`, `FlowLayout`) and `TagsView` | `NativeScroller` is still a stub on iOS (no narration follow) |
+| DeepwellUI | `ScrollProgressView`, `ArticleHeader`, `MarkdownBody`, `YouTubeTranscriptView`, `PodcastPlayerView` (moved from the Mac app in this ticket), `Ayu`; since ticket 19 `ItemRow` (with `StatusBadge`, `FlowLayout`) and `TagsView`; since ticket 17 `NarrationPlayer`, `ListenOverlay`, `ListenBar` | `NativeScroller` follows the spoken word on iOS since ticket 17 |
+| DeepwellNarration (ticket 17) | `NarrationSession`, `PronunciationStore`, `OfflinePins`, `NarrationControls` | same `.narration/` keys and manifest as the Mac |
+| DeepwellTranscription (ticket 17) | `NarrationTranscribers.bestAvailable` (SpeechAnalyzer → SFSpeechRecognizer) for narration word timing only | the phone still doesn't transcribe podcasts |
 
-Mac-only, kept in `Apps/Deepwell`: the reader shell's Listen and issue view, `IssueReaderView`, menu building and
+Mac-only, kept in `Apps/Deepwell`: the reader shell's issue view, `IssueReaderView`, menu building and
 picking, Kindle, Settings, `PaneFocus`, the migration UI.
 
 Package changes in this ticket: `resolveContainer()`, the `onSharedStateChange` hook, `CurrentFocus`, the shared save
@@ -197,6 +201,28 @@ iCloud ────────────────────────�
   Opening an unread item and reading moves it to Reading (the reader writes status/progress; `itemChanged()` reloads).
 - The phone heals files from the tag-ops log like the Mac (`LibrarySync`), replays it in conflict merges, and its
   tagging (`PhoneTagger` → `TaggingService`) uses the replayed tag list.
+
+## Listen and offline pinning (ticket 17)
+
+- **Listen.** The reader's toolbar has Listen / Pause for articles and magazine articles. The first tap builds a
+  `NarrationSession` from Settings' Listen model and voice (`MobileSettings.narration`, same defaults as the Mac), the
+  synced OpenRouter key and `<library>/pronunciations.yml`. Without a key, an alert points to Settings. Then
+  `ListenOverlay`, the highlight and tap-to-seek work as on the Mac, and the iOS `NativeScroller` keeps the spoken
+  word in view. Leaving the article stops listening; locking the screen doesn't.
+- **Background audio.** `UIBackgroundModes` has `audio` (next to `processing`). The player's iOS seams (session
+  category, interruptions, AirPods/headphones removal, ±15 s skip snapped to sentences, next/previous track = sentence,
+  rate menu, lock-screen elapsed/duration, "Buffering…" while a chunk is generated, a background task while waiting)
+  are described in docs/narration.md, "Phone".
+- **Mac ↔ phone.** Chunks are shared by key, and the position syncs through `manifest.json` (coordinated
+  read-merge-write, newer position wins). Stop on the Mac, open the article on the phone, press Listen, and it carries on
+  from there. The same works the other way, and also on resume after a pause.
+- **Offline pinning.** Whenever menu.json or the index changes (and on foreground or pull to refresh),
+  `FocusLibrary.pinFocus()` asks iCloud to download each queue item's `.md` and `.narration/` folder. Each Current Focus
+  row shows a small badge: a green arrow when downloaded, a pulsing dotted arrow while downloading, a cloud when not
+  downloaded yet.
+- **Purpose strings.** `NSSpeechRecognitionUsageDescription` now says the phone recognises narration to time the highlight.
+  `NSAppleMusicUsageDescription` was added because the app now links MediaPlayer (Now Playing only, no media library access),
+  so a static scan can't reject the build.
 
 ## Settings and tagging (ticket 16)
 
@@ -350,6 +376,29 @@ Not verified (needs a device, checklist):
    old tag doesn't come back on either device, in the file or in the tag list;
 4. Reading tab on iPhone and iPad: Magazine issues, then Reading (with percentages), then Unread; opening an unread
    item and scrolling moves it to Reading.
+
+## Verified for ticket 17 (2026-11-11)
+
+- `swift test`: 13 bundles, 283 tests, 0 failures (new: `ListenOnPhoneTests` 14). `npm test`: 25 tests, 0 failures.
+- The Mac scheme, `-scheme DeepwellMobile` and `-scheme DeepwellUI` (iOS Simulator) build with `CODE_SIGNING_ALLOWED=NO`.
+- Mac 0.1.0 (9): `scripts/release.sh --keep-build` exported, validated and uploaded it (delivery
+  `ce00bc1d-8f3c-49fa-a96d-8f8fac1786b9`), processed VALID. The app's and both extensions' entitlements are identical
+  to build 8's. Safari lists one Deepwell extension (from /Applications).
+- iOS 0.1.0 (10) archive: `UIBackgroundModes` = audio, processing. The app has team NDMG62GXZA, the iCloud container,
+  `group.com.tejaskale.deepwell` and `keychain-access-groups` `NDMG62GXZA.com.tejaskale.deepwell`. Each extension has
+  the team, its own App ID and the iOS group only. Neither extension links Speech, AVFoundation, AVFAudio, PDFKit or
+  MediaPlayer, or has DeepwellPodcasts/Transcription/Magazines/Narration symbols. The app links AVFAudio, AVFoundation,
+  MediaPlayer and Speech, and references no media-library or recording API. The export stopped at "No Accounts"
+  (Xcode had signed out after the Mac upload).
+
+Not verified (needs a device, checklist):
+
+1. locked-screen playback for 20+ minutes (generate-ahead keeps up; a slow chunk shows "Buffering…" and resumes);
+2. AirPods (press = play/pause, double/triple = next/previous sentence) and the lock screen's ±15 s, rate and scrubber;
+3. a call or Siri pauses, and playback resumes when it ends;
+4. stop on the Mac, then Listen on the phone carries on from the same word (and back);
+5. airplane mode with a pinned Current Focus item: it opens and plays its already-generated audio;
+6. the downloaded/downloading badges on Current Focus rows; the highlight following on the phone and "Jump to current".
 
 ## Not verified
 

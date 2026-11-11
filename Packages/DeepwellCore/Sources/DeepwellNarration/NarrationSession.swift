@@ -5,6 +5,7 @@ import DeepwellModel
 import DeepwellTagging
 import DeepwellTranscription
 import DeepwellIndex
+import DeepwellLibrary
 
 /// Which speech model and voice narrate articles. Stored by the app in UserDefaults.
 public struct NarrationSettings: Codable, Equatable, Sendable {
@@ -55,7 +56,10 @@ struct NarrationManifest: Codable, Equatable {
         var alignVersion: Int?
         var isCurrentlyAligned: Bool { aligned && alignVersion == WordAligner.version }
     }
-    struct Position: Codable, Equatable { var chunk: Int; var word: Int }
+    /// `at`: when the position was set (ticket 17), seconds since 1970 with the fraction (ISO-8601 dates here are whole
+    /// seconds, and older builds can't read fractional ones), so the newer of two devices' positions wins a merge.
+    /// Builds before ticket 17 don't write it; `updatedAt` stands in.
+    struct Position: Codable, Equatable { var chunk: Int; var word: Int; var at: Double? }
 
     var version = 1
     var model: String
@@ -64,6 +68,28 @@ struct NarrationManifest: Codable, Equatable {
     var chunks: [String: Chunk] = [:]
     var position: Position?
     var updatedAt = Date()
+
+    var positionTime: Date { position?.at.map(Date.init(timeIntervalSince1970:)) ?? updatedAt }
+
+    /// What to write when `disk` is what another device (or an earlier session) left in the file: with the same model
+    /// and voice, chunks the other side made for this script are kept (a word-aligned copy beats an estimate), and the
+    /// newer position wins. With a different model or voice, `local` replaces it, as before ticket 17.
+    static func merged(local: NarrationManifest, disk: NarrationManifest?, keys: Set<String>) -> NarrationManifest {
+        guard let disk, disk.model == local.model, disk.voice == local.voice else { return local }
+        var out = local
+        for (key, d) in disk.chunks where keys.contains(key) {
+            if let l = out.chunks[key] {
+                if d.isCurrentlyAligned && !l.isCurrentlyAligned && d.file == l.file { out.chunks[key] = d }
+            } else {
+                out.chunks[key] = d
+            }
+        }
+        if disk.position != nil, local.position == nil || disk.positionTime > local.positionTime {
+            out.position = disk.position
+            if out.position?.at == nil { out.position?.at = disk.updatedAt.timeIntervalSince1970 }
+        }
+        return out
+    }
 }
 
 /// Narration of one article: builds the script, generates chunk audio on demand through OpenRouter, times each word
@@ -124,7 +150,8 @@ public final class NarrationSession {
         let fm = FileManager.default
         var trusted = true   // only delete orphans when the saved manifest was actually read
         do { try await ICloudPlaceholder.ensureLocal(manifestURL, timeout: 15) } catch { trusted = false }
-        if let data = try? Data(contentsOf: manifestURL) {
+        let url = manifestURL
+        if let data = await Task.detached(operation: { try? CoordinatedFile.read(url) }).value {
             if let m = try? JSONDecoder.narration.decode(NarrationManifest.self, from: data) {
                 manifest = m
                 manifest.model = settings.model; manifest.voice = settings.voice
@@ -172,6 +199,10 @@ public final class NarrationSession {
 
     private func load(_ index: Int) async throws -> PreparedChunk {
         let chunk = script.chunks[index]
+        if manifest.chunks[chunk.key] == nil, let disk = await readDisk(), disk.model == manifest.model,
+           disk.voice == manifest.voice, let rec = disk.chunks[chunk.key] {
+            manifest.chunks[chunk.key] = rec   // another device made it while this session was open
+        }
         if var rec = manifest.chunks[chunk.key], rec.starts.count == chunk.words.count, exists(rec.file) {
             let url = fileURL(rec.file)
             do {
@@ -278,8 +309,58 @@ public final class NarrationSession {
     public func setPosition(word: Int) {
         let w = min(max(0, word), max(0, script.words.count - 1))
         position = w
-        manifest.position = .init(chunk: script.chunk(containing: w), word: w)
+        manifest.position = .init(chunk: script.chunk(containing: w), word: w, at: Date().timeIntervalSince1970)
         save()
+    }
+
+    /// Re-reads `manifest.json`: if another device saved a newer position (stopped on the Mac, resuming on the phone),
+    /// adopts it and returns true.
+    @discardableResult
+    public func refreshPosition() async -> Bool {
+        guard let disk = await readDisk(), disk.model == manifest.model, disk.voice == manifest.voice,
+              let p = disk.position, p.word < script.words.count,
+              manifest.position == nil || disk.positionTime > manifest.positionTime else { return false }
+        manifest.position = p
+        if manifest.position?.at == nil { manifest.position?.at = disk.updatedAt.timeIntervalSince1970 }
+        position = p.word
+        return true
+    }
+
+    private func readDisk() async -> NarrationManifest? {
+        let url = manifestURL
+        guard let data = await Task.detached(operation: { try? CoordinatedFile.read(url) }).value else { return nil }
+        return try? JSONDecoder.narration.decode(NarrationManifest.self, from: data)
+    }
+
+    // MARK: Timeline
+
+    /// Seconds into the article at which each word starts: saved word times where a chunk has them, else an estimate
+    /// spread over the chunk's (known or estimated) length. For the lock screen's elapsed/duration and ±15 s skips.
+    public func wordTimes() -> [TimeInterval] {
+        var out: [TimeInterval] = []
+        out.reserveCapacity(script.words.count)
+        var base: TimeInterval = 0
+        for (i, c) in script.chunks.enumerated() {
+            let words = Array(script.words[c.words])
+            let d = chunkDuration(i)
+            let s = starts(chunk: i) ?? WordAligner.proportional(words, duration: d)
+            out.append(contentsOf: s.map { base + $0 })
+            base += d
+        }
+        return out
+    }
+
+    /// The article's length in seconds (saved chunk lengths, estimates for the rest).
+    public var totalDuration: TimeInterval { script.chunks.indices.reduce(0) { $0 + chunkDuration($1) } }
+
+    /// Seconds into the article at `offset` seconds into chunk `index`.
+    public func elapsed(chunk index: Int, offset: TimeInterval) -> TimeInterval {
+        script.chunks.indices.prefix(while: { $0 < index }).reduce(0) { $0 + chunkDuration($1) } + offset
+    }
+
+    private func chunkDuration(_ i: Int) -> TimeInterval {
+        if let rec = manifest.chunks[script.chunks[i].key] { return rec.duration }
+        return Self.estimatedDuration(Array(script.words[script.chunks[i].words]))
     }
 
     /// 0...1 through the article's words.
@@ -289,11 +370,20 @@ public final class NarrationSession {
 
     // MARK: Saving
 
+    /// Coordinated read-merge-write (ticket 17): the phone and the Mac share this file through iCloud, so what the other
+    /// device added (chunks, a newer position) is kept rather than overwritten.
     private func save() {
         manifest.updatedAt = Date()
-        guard let data = try? JSONEncoder.narration.encode(manifest) else { return }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? data.write(to: manifestURL, options: .atomic)
+        let keys = Set(script.chunks.map(\.key))
+        var written = manifest
+        try? CoordinatedFile.updateData(manifestURL) { data in
+            let disk = data.flatMap { try? JSONDecoder.narration.decode(NarrationManifest.self, from: $0) }
+            written = NarrationManifest.merged(local: manifest, disk: disk, keys: keys)
+            return try JSONEncoder.narration.encode(written)
+        }
+        manifest.chunks = written.chunks
+        manifest.position = written.position
     }
 
     /// About 2.6 words a second when the file's length cannot be read.

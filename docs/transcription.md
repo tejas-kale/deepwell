@@ -16,6 +16,13 @@ Package target `DeepwellTranscription` (in `Packages/DeepwellCore`). Consumes th
   and `YouTubeTranscriptView` work unchanged. On save the file is re-read first, so concurrent edits (tags) survive.
 - `AppleSpeechTranscriber`: `SFSpeechRecognizer` with `requiresOnDeviceRecognition`. Needs `NSSpeechRecognitionUsageDescription`
   (added to `Apps/Deepwell/Info.plist`); no extra sandbox entitlement (network.client already present for downloads).
+- `SpeechAnalyzerTranscriber` (ticket 17, `@available(macOS 26, iOS 26, *)`): `SpeechAnalyzer` with a
+  `SpeechTranscriber` module (`attributeOptions: [.audioTimeRange]`). It installs the locale's model through
+  `AssetInventory` on first use, runs `analyzeSequence(from: AVAudioFile)` + `finalizeAndFinish`, and turns the final
+  results' timed runs into words (`TimedRuns.words`: a run that continues a word, like "n't", joins it).
+  `FallbackTranscriber(primary:fallback:)` tries one and then the other. `NarrationTranscribers.bestAvailable(locale:)` =
+  SpeechAnalyzer → `AppleSpeechTranscriber`. Only the phone's narration word timing uses it. The Mac still uses
+  `AppleSpeechTranscriber` for podcasts and narration, and the phone still doesn't transcribe podcasts (ticket 20).
 - UI: `TranscriptionStatusView(status:onRetry:)` (queued / progress / failed + Retry). Not placed in the library list;
   ticket 02 should add `if let s = transcription.queue.status(for: item.id) { TranscriptionStatusView(status: s) { ... retry(id:) } }`.
   The reader should show the placeholder until the status disappears. `AppModel.transcription` owns the controller.
@@ -54,4 +61,6 @@ Verified: `swift test` (queue order, one-at-a-time, marker cleared and body repl
 restart resume, persisted failures, formatter/parser round trip) using stubs; unsigned `xcodebuild` build.
 **Not verified:** `AppleSpeechTranscriber` against real audio (permission prompt, on-device model availability, timestamps,
 progress), `URLSessionAudioDownloader` against a real server, SwiftUI rendering of `TranscriptionStatusView`, and
-real-library behaviour with iCloud placeholder files. `SpeechAnalyzer` (macOS 26) is not used; app targets macOS 14.
+real-library behaviour with iCloud placeholder files. Ticket 17: `TimedRuns.words` and `FallbackTranscriber` are
+tested; `SpeechAnalyzerTranscriber` itself (model download, real timings) is **not verified** on a device. The Mac
+doesn't use it (it targets macOS 14).
