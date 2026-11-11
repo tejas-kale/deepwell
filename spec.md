@@ -25,11 +25,12 @@ of topic bundles so you can go deep on one topic per week.
   validates and uploads (see docs/install.md). `scripts/install.sh` is kept only as a local development-signed fallback.
   The app group stays `$(TeamIdentifierPrefix)dev.deepwell`, because macOS accepts team-prefixed groups in
   App Store/TestFlight signing without registering them in the portal, and it keeps the capture inbox where it
-  was (App Store Connect validation of this is still pending). The iOS app (ticket 15) gets its own `group.` id. Every bundle sets `PROVISIONING_PROFILE_REQUIRED = YES`,
+  was (confirmed: `altool --validate-app` passed on 2026-11-11). The iOS app (ticket 15) gets its own `group.` id. Every bundle sets `PROVISIONING_PROFILE_REQUIRED = YES`,
   because macOS extensions otherwise ship without a profile, which TestFlight rejects (ITMS-90889).
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
   extensions not signed with a paid account. Ticket 12 moves signing to the paid account to settle this.
-- **UNVERIFIED (2026-11-11), needs a manual test of the TestFlight build.** The export is signed with Apple
+- **UNVERIFIED (2026-11-11), needs a manual test of the TestFlight build.** Build 0.1.0 (2) passed App Store
+  Connect validation and was uploaded (delivery 75f2d33f-21fa-494c-ba7b-a073aac00b98). The export is signed with Apple
   Distribution (team NDMG62GXZA), and the app and both extensions carry Mac Team Store profiles. Nobody has yet
   installed it from TestFlight or run it in Safari. No result is claimed. To settle the risk:
   1. Install Deepwell from the TestFlight app. Developer > "Allow Unsigned Extensions" must stay **off**.
@@ -146,7 +147,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 | 08 Magazine import | Built, UI unverified | `docs/magazines.md`. Fixtures generated at test time, not real magazines; splitting prompt never run against the real API; drop, Dock, Share Extension and the reader jump never run. Shares one Share Extension target with 07 (merged by hand; combined activation rule untested). |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
 | 10 Monday schedule | Removed | Replaced by on-demand building; scheduler, notification and their tests deleted. |
-| 12 Paid account and TestFlight | Built, partly unverified | `docs/install.md`, `scripts/release.sh`. Signed App Store export checked locally (2026-11-11). Not yet validated or uploaded (no API key), and the TestFlight install and Safari restart test are not done (see Platform → Risk). |
+| 12 Paid account and TestFlight | Built, partly unverified | `docs/install.md`, `scripts/release.sh`. Build 0.1.0 (2) validated and uploaded to TestFlight (2026-11-11). The TestFlight install and Safari restart test are not done (see Platform → Risk). |
 
 Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.
