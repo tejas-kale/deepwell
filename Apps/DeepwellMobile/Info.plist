@@ -13,6 +13,9 @@
 	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key><true/>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
+	<!-- Required because DeepwellUI links DeepwellTranscription (SFSpeechRecognizer), even though the phone never
+	     transcribes (spec: the Mac does). Without it App Store Connect processing rejects the build (ITMS-90683). -->
+	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes audio on your Mac. On this device it only reads the transcripts your Mac made.</string>
 	<key>DeepwellAppGroup</key><string>group.com.tejaskale.deepwell</string>
 	<key>UILaunchScreen</key><dict/>
 	<key>UIApplicationSceneManifest</key>

@@ -73,7 +73,7 @@ That platform was added on 2026-11-11 (docs/ios.md).
 
 - `scripts/release.sh --platform ios` archives `DeepwellMobile` to `build/release/ios/`, exports
   `DeepwellMobile.ipa`, checks the team, the app group `group.com.tejaskale.deepwell`, the iCloud container and the
-  embedded profile, then validates and uploads with `altool -t ios`. Uploaded numbers go to `build/release/uploaded-ios`.
+  embedded profile, then validates and uploads with `altool -t ios`. Both platforms then wait for App Store Connect's processing verdict: a build can upload fine and still be rejected (e.g. a missing purpose string). Uploaded numbers go to `build/release/uploaded-ios`.
   The build number is shared with the Mac (`CURRENT_PROJECT_VERSION`), so each upload of either platform bumps it.
 - The archive is development-signed and needs at least one registered iPhone or iPad in the team. The team already had
   devices on 2026-11-11. On a team without any: connect the device, choose it as the DeepwellMobile run destination in

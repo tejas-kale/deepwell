@@ -105,7 +105,12 @@ the team, the app group, the iCloud container and the embedded profile, then val
 - `xcodebuild -scheme DeepwellMobile -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`: builds.
 - Signed archive and export: `codesign -d --entitlements` shows `iCloud.com.tejaskale.deepwell` (container and
   ubiquity), CloudDocuments, Production, and `group.com.tejaskale.deepwell`.
-- `altool --validate-app -t ios`: VERIFY SUCCEEDED. Uploaded 0.1.0 (4), delivery `63dc4f80-3e95-4b0b-a3e3-8393dbc70780`.
+- `altool --validate-app -t ios`: VERIFY SUCCEEDED. Build 0.1.0 (4) uploaded (delivery `63dc4f80-…`), but App Store
+  Connect then rejected it while processing: ITMS-90683, `NSSpeechRecognitionUsageDescription` was missing. The app
+  never uses speech recognition, but it links DeepwellTranscription through DeepwellUI, so the string is required.
+  Added the string. 0.1.0 (5) uploaded (delivery `7826e2e7-1f2b-4cad-84dd-0fc4c85ebce8`) and processed: VALID.
+  `release.sh` now waits for that processing verdict (`altool --build-status`), because "UPLOAD SUCCEEDED" alone
+  doesn't mean the build will appear in TestFlight.
 - The Mac scheme (`CODE_SIGNING_ALLOWED=NO`) and `-scheme DeepwellUI` for the iOS Simulator still build. The Mac path of
   `release.sh` still exports (`--export-only`).
 

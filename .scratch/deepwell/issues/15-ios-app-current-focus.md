@@ -4,7 +4,7 @@
 
 **Blocked by:** 12, 13, 14
 
-**Status:** done with unverified items (2026-11-11): built and uploaded to TestFlight as iOS 0.1.0 (4); the five device checks below are not verified yet (docs/ios.md → Not verified)
+**Status:** done with unverified items (2026-11-11): built and uploaded to TestFlight as iOS 0.1.0 (5); the five device checks below are not verified yet (docs/ios.md → Not verified)
 
 ## Scope
 

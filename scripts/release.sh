@@ -198,7 +198,28 @@ echo "==> Validating with App Store Connect"
 xcrun altool --validate-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}"
 
 echo "==> Uploading build $BUILD to TestFlight"
-xcrun altool --upload-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}"
+UPLOAD_LOG="$OUT/upload-$PLATFORM.log"
+xcrun altool --upload-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}" 2>&1 | tee "$UPLOAD_LOG"
 echo "$BUILD" >> "$UPLOADED"
-echo "==> Uploaded Deepwell $VERSION ($BUILD) for $PLATFORM. Processing takes a few minutes; it then appears in TestFlight."
+DELIVERY=$(sed -nE 's/^Delivery UUID: ([0-9a-fA-F-]+).*/\1/p' "$UPLOAD_LOG" | tail -1)
+echo "==> Uploaded Deepwell $VERSION ($BUILD) for $PLATFORM, delivery ${DELIVERY:-unknown}."
 echo "    Commit the bumped CURRENT_PROJECT_VERSION in project.yml."
+
+# "UPLOAD SUCCEEDED" only means the file arrived. App Store Connect then processes it and may still reject it
+# (e.g. ITMS-90683, a missing purpose string); such a build never appears in TestFlight. Wait for the verdict.
+[[ -n "$DELIVERY" ]] || die "no Delivery UUID in the upload output; check App Store Connect by hand"
+echo "==> Waiting for App Store Connect processing (up to 20 minutes)"
+for _ in $(seq 40); do
+  status=$(xcrun altool --build-status --delivery-id "$DELIVERY" "${AUTH_ALTOOL[@]}" 2>&1 || true)
+  if grep -q 'BUILD-STATUS: FAILED' <<<"$status"; then
+    sed -n '/PROCESSING-ERRORS/,/IMPORT-STATUS/p' <<<"$status" >&2
+    die "App Store Connect rejected build $BUILD while processing it (see above). Fix it and run again (a new number)."
+  fi
+  if grep -q 'IS-ON-APP-STORE-CONNECT: true' <<<"$status"; then
+    echo "==> Build $BUILD processed: $(sed -nE 's/.*BUILD-STATUS: *//p' <<<"$status" | head -1). It appears in TestFlight shortly."
+    exit 0
+  fi
+  sleep 30
+done
+echo "==> Still processing after 20 minutes. Check later with:"
+echo "    xcrun altool --build-status --delivery-id $DELIVERY --api-key \$ASC_KEY_ID --api-issuer \$ASC_ISSUER_ID"
