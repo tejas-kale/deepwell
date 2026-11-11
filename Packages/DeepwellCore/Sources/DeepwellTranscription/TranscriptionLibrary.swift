@@ -54,7 +54,7 @@ public struct FolderTranscriptionLibrary: TranscriptionLibrary {
     public func save(_ doc: ItemDocument) throws {
         try access.withFolder { folder in
             guard let (url, _) = locate(doc.item.id, in: folder) else { throw TranscriptionError.itemMissing }
-            try FrontmatterCodec.encode(doc).write(to: url, atomically: true, encoding: .utf8)
+            try CoordinatedFile.write(FrontmatterCodec.encode(doc), to: url)
         }
     }
 }

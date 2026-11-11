@@ -4,6 +4,7 @@ import DeepwellModel
 import DeepwellIndex
 import DeepwellCuration
 import DeepwellUI
+import DeepwellLibrary
 
 /// What the sidebar has selected. Current Focus is this week's bundle; the rest are views of all captures.
 enum LibrarySection: Hashable {
@@ -40,15 +41,15 @@ final class LibraryModel {
     private(set) var revision = 0
 
     let folder: URL
+    let location: LibraryLocation
     private(set) var index: LibraryIndex?
     private var sync: LibrarySync?
-    private var watcher: FolderWatcher?
-    private nonisolated(unsafe) var accessing = false
+    private var watcher: LibraryWatcher?
     private var syncTask: Task<Void, Never>?
 
-    init(folder: URL) {
-        self.folder = folder
-        accessing = folder.startAccessingSecurityScopedResource()
+    init(location: LibraryLocation) {
+        self.location = location
+        self.folder = location.url
         do {
             let index = try LibraryIndex(url: LibraryIndex.defaultIndexURL())
             self.index = index
@@ -59,13 +60,20 @@ final class LibraryModel {
         }
         reload()
         scheduleSync()
-        watcher = FolderWatcher(url: folder) { [weak self] in
+        // NSMetadataQuery in the iCloud container (changes, downloads, conflicts), FSEvents in the local fallback.
+        watcher = LibraryWatcher(location: location, onChange: { [weak self] in
             Task { @MainActor in self?.scheduleSync() }
-        }
-    }
-
-    deinit {
-        if accessing { folder.stopAccessingSecurityScopedResource() }
+        }, onConflicts: { [weak self] urls in
+            // Already on a background queue: merge each item's conflict versions into the current file.
+            var failures: [String] = []
+            for url in urls {
+                do { try ConflictResolver.resolve(url) } catch { failures.append(url.lastPathComponent) }
+            }
+            Task { @MainActor in
+                if !failures.isEmpty { self?.errorMessage = "Could not merge iCloud conflicts in: \(failures.joined(separator: ", "))" }
+                self?.scheduleSync()
+            }
+        })
     }
 
     func fileURL(for item: IndexedItem) -> URL { folder.appendingPathComponent(item.relativePath) }

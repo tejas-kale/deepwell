@@ -10,8 +10,16 @@ private struct NoopDownloader: UbiquitousDownloader {
 private final class FakeDownloader: UbiquitousDownloader, @unchecked Sendable {
     var requested: [URL] = []
     let materialize: (URL) -> Void
+    /// File names reported as "not downloaded" (dataless files, current macOS).
+    private let lock = NSLock()
+    private var _evicted = Set<String>()
+    var evicted: Set<String> {
+        get { lock.lock(); defer { lock.unlock() }; return _evicted }
+        set { lock.lock(); _evicted = newValue; lock.unlock() }
+    }
     init(materialize: @escaping (URL) -> Void = { _ in }) { self.materialize = materialize }
     func startDownloading(_ url: URL) throws { requested.append(url); materialize(url) }
+    func isDownloaded(_ url: URL) -> Bool { !evicted.contains(url.lastPathComponent) }
 }
 
 final class IndexTests: XCTestCase {
@@ -82,6 +90,21 @@ final class IndexTests: XCTestCase {
         let r = try makeSync(index).sync()
         XCTAssertEqual(index.count, 1)
         XCTAssertEqual(r.unreadable, 1)
+    }
+
+    func testSharedStateFolderIsNotIndexed() throws {
+        try add("Real")
+        let shared = dir.appendingPathComponent(".deepwell", isDirectory: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        try "{}".write(to: shared.appendingPathComponent("menu.json"), atomically: true, encoding: .utf8)
+        // Even a valid item file inside .deepwell/ is not an item.
+        let stray = Item(id: "stray", type: .article, title: "Stray")
+        try ItemFileWriter.write(ItemDocument(item: stray, body: "x"), into: shared)
+        let index = try LibraryIndex()
+        let r = try makeSync(index).sync()
+        XCTAssertEqual(index.count, 1)
+        XCTAssertEqual(try index.list().map(\.item.title), ["Real"])
+        XCTAssertEqual(r.unreadable, 0)
     }
 
     func testFullTextSearchOverTitleAndBody() throws {
@@ -172,6 +195,39 @@ final class IndexTests: XCTestCase {
         XCTAssertEqual(r.removed, 0)
         XCTAssertEqual(index.count, 1)
         XCTAssertEqual(dl.requested.map(\.lastPathComponent), [u.lastPathComponent])
+    }
+
+    func testDatalessFileKeepsRowAndRequestsDownload() throws {
+        let u = try add("Evicted in place")
+        let fresh = try add("Never downloaded")
+        let dl = FakeDownloader()
+        let index = try LibraryIndex()
+        let sync = makeSync(index, downloader: dl)
+        dl.evicted = [fresh.lastPathComponent]
+        try sync.sync()
+        XCTAssertEqual(index.count, 1, "a file whose data isn't here yet is not read")
+        dl.evicted = [u.lastPathComponent, fresh.lastPathComponent]
+        let r = try sync.sync()
+        XCTAssertEqual(r.placeholders, 2)
+        XCTAssertEqual(r.removed, 0, "the evicted file keeps its row")
+        XCTAssertEqual(try index.list().map(\.item.title), ["Evicted in place"])
+        XCTAssertEqual(Set(dl.requested.map(\.lastPathComponent)), [u.lastPathComponent, fresh.lastPathComponent])
+        dl.evicted = []
+        try sync.sync()
+        XCTAssertEqual(index.count, 2, "indexed once downloaded")
+    }
+
+    func testEnsureLocalWaitsForDatalessFile() async throws {
+        let u = dir.appendingPathComponent("dataless.md")
+        try "x".write(to: u, atomically: true, encoding: .utf8)
+        var dl: FakeDownloader!
+        dl = FakeDownloader { real in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { dl.evicted = [] }
+        }
+        dl.evicted = ["dataless.md"]
+        try await ICloudPlaceholder.ensureLocal(u, downloader: dl, timeout: 5, pollInterval: 0.05)
+        XCTAssertEqual(dl.requested.count, 1)
+        XCTAssertTrue(dl.isDownloaded(u))
     }
 
     func testEnsureLocalDownloadsPlaceholderBeforeReturning() async throws {

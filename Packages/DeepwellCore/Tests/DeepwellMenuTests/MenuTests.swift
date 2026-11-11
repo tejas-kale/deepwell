@@ -292,6 +292,36 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(svc.state.history.map(\.topic), ["C"])
     }
 
+    func testStoreRoundTripsAtLibraryDeepwellFolder() throws {
+        let library = tmp.appendingPathComponent("Library", isDirectory: true)
+        let store = try MenuStore(libraryFolder: library)
+        XCTAssertEqual(store.url.path, library.appendingPathComponent(".deepwell/menu.json").path)
+        let state = MenuState(history: [PickRecord(weekStart: Date(timeIntervalSince1970: 1_762_732_800), topic: "Rust")])
+        try store.save(state)
+        XCTAssertEqual(try MenuStore(libraryFolder: library).load(), state, "a fresh store over the same library reads it back")
+    }
+
+    func testLegacyMenuIsMovedOnceAndNeverOverwritesTheNewOne() throws {
+        let library = tmp.appendingPathComponent("Library", isDirectory: true)
+        let legacy = tmp.appendingPathComponent("AppSupport/Deepwell/menu.json")
+        try FileManager.default.createDirectory(at: legacy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let old = MenuState(history: [PickRecord(weekStart: Date(timeIntervalSince1970: 1_762_732_800), topic: "Old")])
+        try MenuStore(url: legacy).save(old)
+
+        let store = try MenuStore(libraryFolder: library)
+        XCTAssertEqual(try store.adoptLegacy(from: legacy), .moved)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path), "deleted only after the copy")
+        XCTAssertEqual(store.load(), old)
+        XCTAssertEqual(try store.adoptLegacy(from: legacy), .nothingToMove, "second launch: nothing to do")
+
+        // If both exist, the library's copy wins and the old file is left untouched.
+        try MenuStore(url: legacy).save(MenuState())
+        XCTAssertEqual(try store.adoptLegacy(from: legacy), .keptExisting)
+        XCTAssertEqual(store.load(), old)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.path))
+        XCTAssertEqual(try store.adoptLegacy(from: nil), .nothingToMove)
+    }
+
     func testMissingStoreFileGivesEmptyState() {
         XCTAssertEqual(MenuStore(url: tmp.appendingPathComponent("none.json")).load(), MenuState())
     }

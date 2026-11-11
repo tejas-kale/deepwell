@@ -147,13 +147,15 @@ public actor TaggingService {
 
     /// Re-reads the file (it may have changed during the API call) and writes only if it still needs tagging.
     static func apply(_ result: TagResult, to url: URL) throws -> Bool {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var doc = try FrontmatterCodec.decode(text)
-        guard needsTagging(doc.item) else { return false }
-        doc.item.tags = result.tags
-        doc.item.summary = result.summary
-        NewTagFlag.write(result.newTags, to: &doc.item)
-        try FrontmatterCodec.encode(doc).write(to: url, atomically: true, encoding: .utf8)
-        return true
+        // Read and write under one coordinated write, so a sync landing mid-call is not overwritten blindly.
+        let written = try CoordinatedFile.update(url) { text in
+            var doc = try FrontmatterCodec.decode(text)
+            guard needsTagging(doc.item) else { return nil }
+            doc.item.tags = result.tags
+            doc.item.summary = result.summary
+            NewTagFlag.write(result.newTags, to: &doc.item)
+            return FrontmatterCodec.encode(doc)
+        }
+        return written != nil
     }
 }

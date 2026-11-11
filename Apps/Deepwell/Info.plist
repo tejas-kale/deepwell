@@ -16,6 +16,15 @@
 	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes podcast and video audio on this Mac, so you can read items that have no published transcript.</string>
 	<key>DeepwellAppGroup</key><string>$(TeamIdentifierPrefix)dev.deepwell</string>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.tejaskale.deepwell</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key><true/>
+			<key>NSUbiquitousContainerName</key><string>Deepwell</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key><string>Any</string>
+		</dict>
+	</dict>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

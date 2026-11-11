@@ -56,6 +56,12 @@ public struct LibrarySync: Sendable {
             guard url.pathExtension.lowercased() == "md" else { continue }
             let rel = relativePath(url, rootPath: rootPath)
             seen.insert(rel)
+            if !downloader.isDownloaded(url) {
+                // Evicted (dataless): keep any existing row, ask for the data; indexed once it lands and the watcher fires.
+                try? downloader.startDownloading(url)
+                report.placeholders += 1
+                continue
+            }
             let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
             if let old = known[rel], abs(old.timeIntervalSince(mtime)) < 0.001 { report.skipped += 1; continue }
             guard let text = try? String(contentsOf: url, encoding: .utf8), let doc = try? FrontmatterCodec.decode(text) else {

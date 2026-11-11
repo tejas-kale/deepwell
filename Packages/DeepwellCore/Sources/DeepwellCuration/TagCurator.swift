@@ -2,6 +2,7 @@ import Foundation
 import DeepwellModel
 import DeepwellIndex
 import DeepwellTagging
+import DeepwellLibrary
 
 public struct CurationResult: Equatable, Sendable {
     /// Library-relative paths of files that were rewritten (and re-indexed).
@@ -97,11 +98,16 @@ public struct TagCurator: Sendable {
         for entry in try index.list() where candidate(entry) {
             let url = root.appendingPathComponent(entry.relativePath)
             do {
-                var doc = try FrontmatterCodec.decode(String(contentsOf: url, encoding: .utf8))
-                let before = doc.item
-                change(&doc.item)
-                if doc.item == before { continue }
-                try FrontmatterCodec.encode(doc).write(to: url, atomically: true, encoding: .utf8)
+                var changed: ItemDocument?
+                try CoordinatedFile.update(url) { text in
+                    var doc = try FrontmatterCodec.decode(text)
+                    let before = doc.item
+                    change(&doc.item)
+                    if doc.item == before { return nil }
+                    changed = doc
+                    return FrontmatterCodec.encode(doc)
+                }
+                guard let doc = changed else { continue }
                 let mtime = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? Date()
                 try index.upsert(path: entry.relativePath, document: doc, modified: mtime)
                 result.updated.append(entry.relativePath)

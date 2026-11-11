@@ -16,7 +16,8 @@ Code: `Packages/DeepwellCore/Sources/DeepwellMenu`. App glue: `Apps/Deepwell/Men
   with the problems fed back to the model, then throw. Less than one bundle of material (3 items, 2.5 h): no API
   call. Output budget 8000 tokens so a long reply is not cut mid-JSON. Minutes come from our
   data, never the model.
-- **Persistence:** `~/Library/Application Support/Deepwell/menu.json` (menu, picked queue, pick history). Not iCloud.
+- **Persistence:** `<library>/.deepwell/menu.json` (menu, picked queue, pick history), in iCloud so the iOS app can read it;
+  the Mac is the only writer. Moved from `~/Library/Application Support/Deepwell/menu.json` on first run (ticket 13, docs/storage.md).
   Not rebuildable from Markdown like the index, but disposable: losing it loses only the menu/pick; rebuild any time.
 - **Queue:** frozen ordered ids at pick time; progress is derived from item status/progress in the index each time
   (`QueueProgress`, time-weighted). Rebuilding the menu keeps the existing queue. Re-picking in a week replaces it.

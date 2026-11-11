@@ -10,7 +10,7 @@ struct SettingsView: View {
     let tagging: TaggingController
     let kindle: KindleController
     let preferences: Preferences
-    /// Library root, for the pronunciation map (nil until a library folder is chosen).
+    /// Library root, for the pronunciation map (nil while the library is still opening).
     let libraryFolder: URL?
 
     var body: some View {
@@ -348,7 +348,7 @@ private struct ListenSettingsView: View {
                 if let libraryFolder {
                     PronunciationEditor(store: PronunciationStore(libraryFolder: libraryFolder), settings: n)
                 } else {
-                    Text("Choose a library folder first.").foregroundStyle(.secondary)
+                    Text("The library is still opening.").foregroundStyle(.secondary)
                 }
             } header: {
                 Text("Pronunciations")

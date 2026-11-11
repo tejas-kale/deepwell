@@ -151,9 +151,7 @@ final class PodcastsTests: XCTestCase {
         let libDir = root.appendingPathComponent("lib"), inboxDir = root.appendingPathComponent("inbox")
         try FileManager.default.createDirectory(at: libDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let storage = MemStorage()
-        let store = LibraryFolderStore(storage: storage)
-        try store.choose(libDir)
+        let store = LibraryFolderStore(folder: libDir)
 
         let inbox = CaptureInbox(directory: inboxDir)
         try inbox.enqueue(.link(Fixture.apple))
@@ -173,12 +171,6 @@ final class PodcastsTests: XCTestCase {
         let text = try String(contentsOf: outcome.saved[0], encoding: .utf8)
         XCTAssertTrue(text.contains("type: podcast"))
     }
-}
-
-private final class MemStorage: BookmarkStorage, @unchecked Sendable {
-    var data: Data?
-    func load() -> Data? { data }
-    func save(_ d: Data?) { data = d }
 }
 
 import DeepwellYouTube

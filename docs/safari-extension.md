@@ -7,7 +7,7 @@ project.yml                      xcodegen spec (Deepwell.xcodeproj is generated,
 Config/                          xcconfig; Local.xcconfig (gitignored) holds DEVELOPMENT_TEAM
 Packages/DeepwellCore/           ALL logic, `swift test`-able
   DeepwellModel                  Item, ItemType, ItemStatus, FrontmatterCodec (no I/O)
-  DeepwellLibrary                LibraryFolderStore (security-scoped bookmark), ItemFileWriter
+  DeepwellLibrary                LibraryFolderStore (iCloud container, docs/storage.md), ItemFileWriter
   DeepwellCapture                CapturePayload, CaptureInbox (hand-off queue + drain)
 Apps/Deepwell/                   SwiftUI app glue (first launch, status list)
 Apps/Shared/                     glue compiled into app and extension (inbox location)
@@ -38,11 +38,10 @@ xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -derivedDataPath build/d
   logged-in session). Turndown converts the cleaned HTML to Markdown in the same place, so the payload sent to
   native code is already Markdown. `extract.js` is the same file in Safari and in node tests (jsdom).
 - **Hand-off: file inbox in the app-group container, not direct writes.** The extension's sandbox cannot use the
-  app's security-scoped bookmark, and the library folder is user-chosen (possibly iCloud). So
+  library (since ticket 13 the app's iCloud container, which only the app is entitled to). So
   `background.js` -> `sendNativeMessage` -> `SafariWebExtensionHandler` validates the payload and writes one JSON
   file to `<app group>/Inbox`, then opens `deepwell://inbox` to wake the app. The app drains the inbox (on launch,
-  on that URL, and every 2 s) and writes Markdown into the library through its bookmark. If the library is not
-  chosen or the app is not running, captures stay queued; nothing is lost. Corrupt files move to `Inbox/rejected/`.
+  on that URL, and every 2 s) and writes Markdown into the library. If the library has not opened yet or the app is not running, captures stay queued; nothing is lost. Corrupt files move to `Inbox/rejected/`.
   App-group ID is `$(TeamIdentifierPrefix)dev.deepwell` (team NDMG62GXZA). Ticket 12 keeps it for
   TestFlight signing (see spec.md Platform), and the paid-team export signs all three bundles with it.
 - **Shortcut:** Ctrl+Shift+S (not Cmd+Shift+S, Safari's Save As). Declared as `_execute_action`.

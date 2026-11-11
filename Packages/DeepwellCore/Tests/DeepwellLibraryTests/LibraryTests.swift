@@ -22,7 +22,7 @@ final class FakeCoding: BookmarkCoding, @unchecked Sendable {
     func stopAccessing(_ url: URL) { stopped += 1 }
 }
 
-final class LibraryFolderStoreTests: XCTestCase {
+final class LegacyLibraryBookmarkTests: XCTestCase {
     var tmp: URL!
     override func setUpWithError() throws {
         tmp = FileManager.default.temporaryDirectory.appendingPathComponent("dw-\(UUID().uuidString)", isDirectory: true)
@@ -33,18 +33,17 @@ final class LibraryFolderStoreTests: XCTestCase {
     func testNotChosenThenChosenPersistsAcrossInstances() throws {
         let storage = MemoryStorage()
         let coding = FakeCoding()
-        XCTAssertEqual(LibraryFolderStore(storage: storage, coding: coding).state, .notChosen)
+        XCTAssertEqual(LegacyLibraryBookmark(storage: storage, coding: coding).state, .none)
         let folder = tmp.appendingPathComponent("Deepwell", isDirectory: true)
-        try LibraryFolderStore(storage: storage, coding: coding).choose(folder)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path), "choose creates the folder")
+        try LegacyLibraryBookmark(storage: storage, coding: coding).remember(folder)
         // A fresh store (simulating relaunch) sees the same folder.
-        XCTAssertEqual(LibraryFolderStore(storage: storage, coding: coding).state, .available(URL(fileURLWithPath: folder.path, isDirectory: true)))
+        XCTAssertEqual(LegacyLibraryBookmark(storage: storage, coding: coding).state, .available(URL(fileURLWithPath: folder.path, isDirectory: true)))
     }
 
     func testWithAccessBalancesScopedAccess() throws {
         let coding = FakeCoding()
-        let store = LibraryFolderStore(storage: MemoryStorage(), coding: coding)
-        try store.choose(tmp)
+        let store = LegacyLibraryBookmark(storage: MemoryStorage(), coding: coding)
+        try store.remember(tmp)
         struct Boom: Error {}
         XCTAssertThrowsError(try store.withAccess { _ in throw Boom() })
         _ = try store.withAccess { $0 }
@@ -54,8 +53,8 @@ final class LibraryFolderStoreTests: XCTestCase {
 
     func testStaleBookmarkIsRecreatedOnResolve() throws {
         let coding = FakeCoding()
-        let store = LibraryFolderStore(storage: MemoryStorage(), coding: coding)
-        try store.choose(tmp)
+        let store = LegacyLibraryBookmark(storage: MemoryStorage(), coding: coding)
+        try store.remember(tmp)
         XCTAssertEqual(coding.made, 1)
         _ = store.state
         XCTAssertEqual(coding.made, 1, "fresh bookmark is left alone")
@@ -66,24 +65,24 @@ final class LibraryFolderStoreTests: XCTestCase {
 
     func testUnresolvableAndClear() throws {
         let storage = MemoryStorage(), coding = FakeCoding()
-        let store = LibraryFolderStore(storage: storage, coding: coding)
-        try store.choose(tmp)
+        let store = LegacyLibraryBookmark(storage: storage, coding: coding)
+        try store.remember(tmp)
         coding.missing = true
         XCTAssertEqual(store.state, .unresolvable)
         XCTAssertThrowsError(try store.withAccess { $0 })
         store.clear()
-        XCTAssertEqual(store.state, .notChosen)
+        XCTAssertEqual(store.state, .none)
     }
 
     func testRealSecurityScopedBookmarkRoundTrip() throws {
-        let store = LibraryFolderStore(storage: MemoryStorage())
-        try store.choose(tmp)
+        let store = LegacyLibraryBookmark(storage: MemoryStorage())
+        try store.remember(tmp)
         guard case .available(let url) = store.state else { return XCTFail("not available") }
         XCTAssertEqual(url.resolvingSymlinksInPath().path, tmp.resolvingSymlinksInPath().path)
     }
 
     func testDefaultFolderIsICloudDriveDeepwell() {
-        let url = LibraryFolderStore.defaultICloudFolder(home: URL(fileURLWithPath: "/Users/x"))
+        let url = LegacyLibraryBookmark.defaultICloudFolder(home: URL(fileURLWithPath: "/Users/x"))
         XCTAssertEqual(url.path, "/Users/x/Library/Mobile Documents/com~apple~CloudDocs/Deepwell")
     }
 }

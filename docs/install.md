@@ -70,10 +70,11 @@ change, or just re-run the script). Expiry does not touch your library: it lives
 - **Capture inbox:** the app group stays `$(TeamIdentifierPrefix)dev.deepwell`, so the inbox is still
   `~/Library/Group Containers/NDMG62GXZA.dev.deepwell/Inbox`. Because the team ID is the same, the old local
   build, the TestFlight build and `install.sh` builds all share it. On first launch, the TestFlight build drains
-  any pending captures into the library, as every launch does. If no library folder is chosen yet, they stay queued.
+  any pending captures into the library, as every launch does. Until the library has opened, they stay queued.
 - **Settings, library bookmark, Keychain keys:** keyed by the bundle id `com.tejaskale.deepwell`, which is
   unchanged. Verified 2026-11-11: the TestFlight build kept the settings, library bookmark and keys written by the
-  development-signed build.
+  development-signed build. From build 3 (ticket 13), the library bookmark is read only once more: it is the source
+  of the one-time move into the iCloud container (docs/storage.md).
 - Before the first TestFlight install: open the current Deepwell once so pending captures drain, then quit it and
   move the locally built `/Applications/Deepwell.app` to the Trash. TestFlight does not overwrite a differently signed
   copy. It installs next to it as `Deepwell 2.app`, and the scripts treat `/Applications/Deepwell.app` as the

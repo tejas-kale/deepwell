@@ -3,11 +3,7 @@ import DeepwellModel
 import DeepwellLibrary
 @testable import DeepwellCapture
 
-private final class MemStorage: BookmarkStorage, @unchecked Sendable {
-    var data: Data?
-    func load() -> Data? { data }
-    func save(_ d: Data?) { data = d }
-}
+private struct NoContainer: UbiquityContainerResolving { func containerURL() -> URL? { nil } }
 
 final class CaptureTests: XCTestCase {
     var root: URL!
@@ -50,9 +46,8 @@ final class CaptureTests: XCTestCase {
 
     func testEnqueueThenDrainWritesMarkdownFile() throws {
         let inbox = CaptureInbox(directory: root.appendingPathComponent("inbox"))
-        let library = LibraryFolderStore(storage: MemStorage())
         let lib = root.appendingPathComponent("Library")
-        try library.choose(lib)
+        let library = LibraryFolderStore(folder: lib)
         try inbox.enqueue(payload())
         XCTAssertEqual(inbox.pending().count, 1)
         let r = inbox.drain(into: library)
@@ -66,7 +61,8 @@ final class CaptureTests: XCTestCase {
     func testDrainKeepsCapturesWhenLibraryNotChosen() throws {
         let inbox = CaptureInbox(directory: root.appendingPathComponent("inbox"))
         try inbox.enqueue(payload())
-        let r = inbox.drain(into: LibraryFolderStore(storage: MemStorage()))
+        // Before resolve() the library is not available yet: captures wait in the inbox.
+        let r = inbox.drain(into: LibraryFolderStore(container: NoContainer(), localFallback: root.appendingPathComponent("Fallback")))
         XCTAssertEqual(r.deferred, 1)
         XCTAssertEqual(inbox.pending().count, 1)
     }
@@ -75,8 +71,7 @@ final class CaptureTests: XCTestCase {
         let dir = root.appendingPathComponent("inbox")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("not json".utf8).write(to: dir.appendingPathComponent("1-bad.json"))
-        let library = LibraryFolderStore(storage: MemStorage())
-        try library.choose(root.appendingPathComponent("Library"))
+        let library = LibraryFolderStore(folder: root.appendingPathComponent("Library"))
         let r = CaptureInbox(directory: dir).drain(into: library)
         XCTAssertEqual(r.rejected, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("rejected/1-bad.json").path))

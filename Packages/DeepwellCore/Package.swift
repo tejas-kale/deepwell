@@ -4,7 +4,7 @@ import PackageDescription
 // All Deepwell logic lives here; the Xcode project (project.yml) is thin glue.
 // One library target per concern so later tickets add targets without touching each other:
 //   DeepwellModel   - Item, enums, frontmatter codec (no I/O). Everything depends on this.
-//   DeepwellLibrary - library folder (security-scoped bookmark) + writing item files.
+//   DeepwellLibrary - library location (iCloud container), migration, coordinated item-file writes, conflict merge.
 //   DeepwellCapture - capture payload from the Safari extension, inbox hand-off, ingestion.
 //   DeepwellUI      - SwiftUI views shared by the Mac app and the iOS companion (see docs/ui-module.md).
 // Planned: DeepwellIndex (SQLite), DeepwellTagging (LLM), DeepwellYouTube, DeepwellTranscription,
@@ -47,13 +47,13 @@ let package = Package(
         .testTarget(name: "DeepwellTaggingTests", dependencies: ["DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
         .target(name: "DeepwellYouTube", dependencies: ["DeepwellModel"]),
         .testTarget(name: "DeepwellYouTubeTests", dependencies: ["DeepwellYouTube", "DeepwellModel"]),
-        .target(name: "DeepwellIndex", dependencies: ["DeepwellModel", "DeepwellTagging"], linkerSettings: [.linkedLibrary("sqlite3")]),
+        .target(name: "DeepwellIndex", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellTagging"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .testTarget(name: "DeepwellIndexTests", dependencies: ["DeepwellIndex", "DeepwellLibrary", "DeepwellModel"]),
         .target(name: "DeepwellTranscription", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellYouTube"]),
         .testTarget(name: "DeepwellTranscriptionTests", dependencies: ["DeepwellTranscription", "DeepwellLibrary", "DeepwellModel", "DeepwellYouTube"]),
-        .target(name: "DeepwellMenu", dependencies: ["DeepwellModel", "DeepwellTagging", "DeepwellIndex"]),
-        .testTarget(name: "DeepwellMenuTests", dependencies: ["DeepwellMenu", "DeepwellTagging", "DeepwellIndex", "DeepwellModel"]),
-        .target(name: "DeepwellCuration", dependencies: ["DeepwellModel", "DeepwellIndex", "DeepwellTagging"]),
+        .target(name: "DeepwellMenu", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellTagging", "DeepwellIndex"]),
+        .testTarget(name: "DeepwellMenuTests", dependencies: ["DeepwellMenu", "DeepwellLibrary", "DeepwellTagging", "DeepwellIndex", "DeepwellModel"]),
+        .target(name: "DeepwellCuration", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellIndex", "DeepwellTagging"]),
         .testTarget(name: "DeepwellCurationTests", dependencies: ["DeepwellCuration", "DeepwellIndex", "DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
         .target(name: "DeepwellPodcasts", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellCapture", "DeepwellYouTube", "DeepwellTranscription"]),
         .testTarget(name: "DeepwellPodcastsTests", dependencies: ["DeepwellPodcasts", "DeepwellCapture", "DeepwellLibrary", "DeepwellModel", "DeepwellTranscription"]),

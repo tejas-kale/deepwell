@@ -4,15 +4,21 @@
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** done, with unverified items. Built, tested and uploaded as 0.1.0 (3) on 2026-11-11 (delivery
+4fabde1a-84bd-435f-adb6-6269b665be31). Not verified yet, because it needs the user and real devices:
+- the NSMetadataQuery watcher against the real container;
+- the container shown as iCloud Drive/Deepwell in Finder;
+- the real library's migration on first launch;
+- a two-device conflict merging through `NSFileVersion`.
+See "Manual checks" in docs/storage.md.
 
-- [ ] iCloud Documents capability with container `iCloud.com.tejaskale.deepwell`, `NSUbiquitousContainers` entry public with name "Deepwell"; container resolved off the main thread
-- [ ] `LibraryFolderStore` returns the container's `Documents/` folder; the folder picker and bookmark are removed from Settings and onboarding. If iCloud is signed out: a local fallback folder in Application Support plus a banner
-- [ ] **One-time migration:** if the old bookmarked folder exists and has items, move its contents (`.md`, `.narration/`, `issues/`, `pronunciations.yml`) into the container with coordinated moves, then leave the old folder empty with a `MOVED.txt` explaining where things went. Safe to re-run after an interruption; nothing is deleted before it has been copied
-- [ ] `MenuStore` reads and writes `<library>/.deepwell/menu.json`; on first run an existing App Support `menu.json` is moved there. The indexer ignores `.deepwell/`
-- [ ] `FolderWatcher` is replaced (or backed) by `NSMetadataQuery` over the container. Download state is used in place of `.icloud` placeholder checks where available
-- [ ] Every write to an item file (`ItemFileWriter`, `ItemFileUpdater`, `TagCurator`, transcription, tagging) goes through `NSFileCoordinator`
-- [ ] **Conflict merge:** on `NSFileVersion.unresolvedConflictVersionsOfItem`, merge into the current file: keep the current body, take the most advanced status (done > reading > unread) and the highest progress, take the union of tags (after the tag-ops replay from ticket 19, once it exists), then mark the conflicts resolved and remove them. A pure function `ConflictMerge.merge(current:others:) -> Item`, tested at that seam
-- [ ] docs: `docs/storage.md` (container, migration, `.deepwell/`, conflicts); spec Storage section updated
+- [x] iCloud Documents capability with container `iCloud.com.tejaskale.deepwell`, `NSUbiquitousContainers` entry public with name "Deepwell"; container resolved off the main thread (archive and export entitlements checked; `icloud-container-environment = Production` in the export)
+- [x] `LibraryFolderStore` returns the container's `Documents/` folder; the folder picker and bookmark are removed from Settings and onboarding. If iCloud is signed out: a local fallback folder in Application Support plus a banner (store tested; banner never displayed yet)
+- [x] **One-time migration:** if the old bookmarked folder exists and has items, move its contents (`.md`, `.narration/`, `issues/`, `pronunciations.yml`) into the container with coordinated moves, then leave the old folder empty with a `MOVED.txt` explaining where things went. Safe to re-run after an interruption; nothing is deleted before it has been copied (tested on temp folders only; the real library is not verified)
+- [x] `MenuStore` reads and writes `<library>/.deepwell/menu.json`; on first run an existing App Support `menu.json` is moved there. The indexer ignores `.deepwell/`
+- [ ] `FolderWatcher` is replaced (or backed) by `NSMetadataQuery` over the container. Download state is used in place of `.icloud` placeholder checks where available. **Built (`LibraryWatcher`; download state tested with a fake), never run against the real container**
+- [x] Every write to an item file (`ItemFileWriter`, `ItemFileUpdater`, `TagCurator`, transcription, tagging) goes through `NSFileCoordinator`
+- [ ] **Conflict merge:** on `NSFileVersion.unresolvedConflictVersionsOfItem`, merge into the current file: keep the current body, take the most advanced status (done > reading > unread) and the highest progress, take the union of tags (after the tag-ops replay from ticket 19, once it exists), then mark the conflicts resolved and remove them. A pure function `ConflictMerge.merge(current:others:) -> Item`, tested at that seam. **Merge tested; the `NSFileVersion` wiring (`ConflictResolver`) needs the two-device test**
+- [x] docs: `docs/storage.md` (container, migration, `.deepwell/`, conflicts); spec Storage section updated
 
 Testing: migration against a temp "old folder" (including re-run after a partial move); `ConflictMerge` cases (status order, progress, tags, `extraFrontmatter` such as `needs_transcript` kept if any version has it); `MenuStore` round-trip at the new path. The real iCloud container and conflict generation need a manual two-device test, recorded as verified or not.

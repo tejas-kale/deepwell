@@ -55,7 +55,8 @@ DeepwellLibrary):
 - `SecurityScopedBookmarkCoding`: `.withSecurityScope` on macOS. iOS has no app-scoped bookmarks, so it uses plain bookmark options.
 - `LibraryFolderStore.defaultHome`: `homeDirectoryForCurrentUser` on macOS, `NSHomeDirectory()` on iOS.
 
-Ticket 13 replaces the folder bookmark with the app's iCloud container, so both are stop-gaps.
+Ticket 13 replaced the folder bookmark with the app's iCloud container (docs/storage.md); the bookmark code survives only as
+`LegacyLibraryBookmark`, the Mac's one-time migration source.
 
 ## Verification (2026-11-11)
 

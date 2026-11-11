@@ -4,6 +4,7 @@ import DeepwellIndex
 import DeepwellMenu
 import DeepwellModel
 import DeepwellTagging
+import DeepwellLibrary
 
 /// Thin glue over `MenuService`; all logic is in DeepwellMenu.
 @Observable
@@ -22,10 +23,13 @@ final class MenuController {
     }
     private var settings: MenuSettings { Preferences.shared.menu }
 
-    init(index: LibraryIndex) {
+    /// The menu lives at `<library>/.deepwell/menu.json`; the first time, the old Application Support copy moves there.
+    init(index: LibraryIndex, library: URL) {
         self.index = index
         do {
-            store = MenuStore(url: try MenuStore.defaultURL())
+            let store = try MenuStore(libraryFolder: library)
+            try store.adoptLegacy(from: MenuStore.legacyURL())
+            self.store = store
         } catch {
             store = nil
             errorMessage = "Could not open menu storage: \(error.localizedDescription)"

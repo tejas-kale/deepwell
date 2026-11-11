@@ -1,5 +1,6 @@
 import Foundation
 import DeepwellModel
+import DeepwellLibrary
 
 /// Reading-state rules.
 public enum ReadingState {
@@ -25,14 +26,16 @@ public enum ItemFileUpdater {
     /// unknown frontmatter keys are preserved. Returns the resulting document.
     @discardableResult
     public static func update(_ url: URL, _ change: (inout Item) -> Void) throws -> ItemDocument {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var doc = try FrontmatterCodec.decode(text)
-        let before = doc.item
-        change(&doc.item)
-        if doc.item != before {
-            try FrontmatterCodec.encode(doc).write(to: url, atomically: true, encoding: .utf8)
+        var result: ItemDocument?
+        try CoordinatedFile.update(url) { text in
+            var doc = try FrontmatterCodec.decode(text)
+            let before = doc.item
+            change(&doc.item)
+            result = doc
+            return doc.item != before ? FrontmatterCodec.encode(doc) : nil
         }
-        return doc
+        guard let result else { throw CocoaError(.fileReadUnknown) }
+        return result
     }
 
     @discardableResult

@@ -2,6 +2,7 @@ import SwiftUI
 import DeepwellUI
 import DeepwellModel
 import DeepwellIndex
+import DeepwellLibrary
 
 extension Notification.Name {
     /// Library > Weekly Menu: show the menu in the Current Focus column.
@@ -30,8 +31,8 @@ struct LibraryView: View {
     let tagging: TaggingController
     let kindle: KindleController
 
-    init(folder: URL, tagging: TaggingController, kindle: KindleController) {
-        _model = State(initialValue: LibraryModel(folder: folder))
+    init(location: LibraryLocation, tagging: TaggingController, kindle: KindleController) {
+        _model = State(initialValue: LibraryModel(location: location))
         self.tagging = tagging
         self.kindle = kindle
     }
@@ -74,7 +75,7 @@ struct LibraryView: View {
         }
         .ayuTheme()
         .task(id: model.index != nil) {
-            if menu == nil, let i = model.index { menu = MenuController(index: i) }
+            if menu == nil, let i = model.index { menu = MenuController(index: i, library: model.folder) }
         }
         .onChange(of: model.revision) { menu?.refresh() }   // the week's progress follows item status
         .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenMenu)) { _ in openMenu() }

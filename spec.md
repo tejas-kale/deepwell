@@ -55,14 +55,24 @@ of topic bundles so you can go deep on one topic per week.
 
 ## Storage
 
-- Library folder: chosen on first launch, default `iCloud Drive/Deepwell`.
+- **Library (ticket 13, see docs/storage.md):** the iCloud container `iCloud.com.tejaskale.deepwell`'s `Documents/`,
+  public as "Deepwell", so Finder shows it as `iCloud Drive/Deepwell`. Nothing to choose: the folder picker is gone.
+  The container resolves off the main thread at launch. If iCloud is unavailable: a local fallback in
+  `Application Support/Deepwell/Library` plus a banner; its contents move into the container once iCloud is back.
+- **Migration:** the first launch of the ticket-13 build moves the old user-picked folder (security-scoped bookmark) into the
+  container. Every file is copied (coordinated), verified, and only then deleted. Re-runs finish an interrupted
+  move. Evicted files wait for their download. Name clashes keep both files. `MOVED.txt` is left in the emptied old folder.
+- **Shared state:** `<library>/.deepwell/menu.json` (moved from Application Support on first run). The indexer ignores `.deepwell/`.
+- **Writes:** every item-file write is file-coordinated (`CoordinatedFile`). iCloud conflict versions are merged by
+  `ConflictMerge` (see "iPhone/iPad companion" → Conflicts).
 - One Markdown file per item, with YAML frontmatter:
   `id, type (article|youtube|podcast|magazine-article), title, source_url, author, captured_at,
   duration_minutes or word_count, tags[], status (unread|reading|done), progress, issue_id (magazines)`.
 - Magazine originals go in `<library>/issues/`.
 - The SQLite index (search, tags, bundles, week queue) lives in `~/Library/Application Support/Deepwell`,
   **never in iCloud**, and can be rebuilt entirely from the Markdown files.
-- Evicted iCloud files (`.icloud` placeholders) are downloaded on demand before they're read.
+- Changes come from `NSMetadataQuery` over the container (FSEvents in the local fallback). Evicted files ("not
+  downloaded" status, or old `.icloud` stubs) are downloaded on demand before they're read.
 
 ## LLM
 
@@ -146,6 +156,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
 | 10 Monday schedule | Removed | Replaced by on-demand building; scheduler, notification and their tests deleted. |
 | 12 Paid account and TestFlight | Done | `docs/install.md`, `scripts/release.sh`. Build 0.1.0 (2) validated, uploaded and installed from TestFlight (2026-11-11). One Safari extension, still enabled after a restart without "Allow Unsigned Extensions"; settings and keys carried over (see Platform → Risk). |
+| 13 iCloud container library | Built, uploaded; manual checks pending | `docs/storage.md`. Build 0.1.0 (3) validated and uploaded to TestFlight (delivery 4fabde1a-84bd-435f-adb6-6269b665be31, 2026-11-11). Migration, merge and MenuStore tested on temp folders only. Not verified: the container in Finder, the real library's migration, a two-device conflict. |
 
 Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.

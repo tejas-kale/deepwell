@@ -12,7 +12,7 @@ settings:
     SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "3"
     ENABLE_HARDENED_RUNTIME: YES
     # macOS app extensions default to NO; TestFlight rejects any bundle without embedded.provisionprofile
     # (ITMS-90889), so make automatic signing provision the app and both extensions.
@@ -71,9 +71,17 @@ targets:
       path: Apps/Deepwell/Deepwell.entitlements
       properties:
         com.apple.security.app-sandbox: true
+        # Kept only so the pre-ticket-13 library bookmark still resolves for the one-time migration (docs/storage.md).
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
         com.apple.security.network.client: true   # Anthropic API (tagging)
+        # The library lives in this iCloud container's Documents/ (ticket 13, docs/storage.md).
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.tejaskale.deepwell
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.com.tejaskale.deepwell
+        com.apple.developer.icloud-services:
+          - CloudDocuments
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)dev.deepwell
   DeepwellSafariExtension:

@@ -14,7 +14,7 @@ public enum ItemFileWriter {
             url = folder.appendingPathComponent(name.replacingOccurrences(of: ".md", with: "-\(n).md"))
             n += 1
         }
-        try FrontmatterCodec.encode(doc).write(to: url, atomically: true, encoding: .utf8)
+        try CoordinatedFile.write(FrontmatterCodec.encode(doc), to: url)
         return url
     }
 
