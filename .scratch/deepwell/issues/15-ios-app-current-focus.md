@@ -4,7 +4,7 @@
 
 **Blocked by:** 12, 13, 14
 
-**Status:** done with unverified items (2026-11-11): built and uploaded to TestFlight as iOS 0.1.0 (5); the five device checks below are not verified yet (docs/ios.md → Not verified)
+**Status:** done with unverified items (2026-11-11): built and uploaded to TestFlight as iOS 0.1.0 (5); the first device check passed (user, 2026-11-11); the other four are not verified yet (docs/ios.md → Not verified)
 
 ## Scope
 
@@ -18,7 +18,7 @@
 
 ## Acceptance
 
-- [ ] Fresh TestFlight install on iPhone shows the Mac's picked bundle in order with matching progress
+- [x] Fresh TestFlight install on iPhone shows the Mac's picked bundle in order with matching progress (user, build 5, 2026-11-11)
 - [ ] Marking an item done on the phone updates the Mac's queue progress within a sync cycle, and vice versa
 - [ ] Reading on both devices, then syncing, leaves no conflict files and keeps the furthest progress (manual two-device test, recorded)
 - [ ] A new pick on the Mac appears on the phone without relaunching

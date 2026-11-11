@@ -113,17 +113,19 @@ the team, the app group, the iCloud container and the embedded profile, then val
   doesn't mean the build will appear in TestFlight.
 - The Mac scheme (`CODE_SIGNING_ALLOWED=NO`) and `-scheme DeepwellUI` for the iOS Simulator still build. The Mac path of
   `release.sh` still exports (`--export-only`).
+- On a device, confirmed by the user on 2026-11-11 with build 5 from TestFlight: the app shows up as "Deepwell Reader"
+  in TestFlight, installs and opens on the iPhone. Current Focus shows the Mac's pick and matches the Mac. The Reading
+  tab lists the library's one `reading` item, which matches the container (51 items: 49 unread, 1 reading, 1 done), so
+  the container resolved and the index was built on the phone.
 
 ## Not verified
 
-Nothing has run on an iPhone, an iPad or a simulator (no simulator runtime is installed on this Mac), so all of this
-is unchecked:
+No simulator runtime is installed on this Mac, so only what is listed above has run. Still unchecked:
 
-1. a fresh TestFlight install shows the Mac's pick in order with matching progress;
-2. done on one device shows on the other within a sync cycle;
-3. reading on both devices then syncing leaves no conflict files and keeps the furthest progress;
-4. a new pick on the Mac appears without relaunching. Watch this one: it depends on NSMetadataQuery reporting a file
+1. done on one device shows on the other within a sync cycle;
+2. reading on both devices then syncing leaves no conflict files and keeps the furthest progress;
+3. a new pick on the Mac appears without relaunching. Watch this one: it depends on NSMetadataQuery reporting a file
    inside the hidden `.deepwell/` folder, or on the file presenter firing. If neither does, it shows on the next
    foreground or pull to refresh;
-5. the iPad's three columns, rotation, Split View and Slide Over (the layout switches to tabs at compact width);
-6. the signed-out empty state, the YouTube embed on iOS, and podcast playback.
+4. the iPad's three columns, rotation, Split View and Slide Over (the layout switches to tabs at compact width);
+5. the signed-out empty state, the YouTube embed on iOS, and podcast playback.
