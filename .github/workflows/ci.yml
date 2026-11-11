@@ -1,5 +1,5 @@
 # Tests and unsigned builds on every push to main and every pull request (docs-only changes are skipped).
-# A green run on a push to main triggers release.yml (TestFlight). See docs/ci.md.
+# CI never signs or publishes: releases go out from the Mac with scripts/release.sh. See docs/ci.md.
 name: CI
 
 on:
