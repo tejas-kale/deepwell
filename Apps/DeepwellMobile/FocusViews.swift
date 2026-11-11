@@ -7,16 +7,16 @@ import DeepwellNarration
 
 /// What the iPad sidebar (and the iPhone tab bar) offers. Library (browse, filter, search, tags) is ticket 19.
 enum MobileSection: String, Hashable, CaseIterable, Identifiable {
-    case focus, reading, library, settings
+    case focus, library, settings
     var id: Self { self }
     var title: String {
         switch self {
-        case .focus: "Current Focus"; case .reading: "Reading"; case .library: "Library"; case .settings: "Settings"
+        case .focus: "Current Focus"; case .library: "Library"; case .settings: "Settings"
         }
     }
     var symbol: String {
         switch self {
-        case .focus: "scope"; case .reading: "book"; case .library: "books.vertical"; case .settings: "gearshape"
+        case .focus: "scope"; case .library: "books.vertical"; case .settings: "gearshape"
         }
     }
 }
@@ -123,40 +123,12 @@ struct FocusQueueList: View {
     }
 }
 
-/// What's left to read: magazine issues still splitting on the Mac, then items in progress (status `reading`), then
-/// unread items, each newest capture first. Done items aren't listed (the Library tab has everything); empty
-/// sections are left out.
-struct ReadingList: View {
+/// Ticket 20: magazine issues shared from this device (or another) that the Mac hasn't split yet. Shown at the top of
+/// the Library (the Reading tab that used to hold it was removed).
+struct PendingIssuesSection: View {
     let library: FocusLibrary
-    var selection: Binding<String?>?
 
     var body: some View {
-        Group {
-            if library.inProgress.isEmpty && library.unread.isEmpty && library.pendingIssues.isEmpty {
-                ContentUnavailableView("Nothing to read", systemImage: "book",
-                                       description: Text("Unread items and items you've started show up here."))
-            } else if let selection {
-                List(selection: selection) {
-                    pendingSection
-                    itemSection("Reading", library.inProgress) { row($0).tag($0.item.id) }
-                    itemSection("Unread", library.unread) { row($0).tag($0.item.id) }
-                }
-                .ayuSurface(Ayu.panel)
-            } else {
-                List {
-                    pendingSection
-                    itemSection("Reading", library.inProgress) { e in NavigationLink(value: e.item.id) { row(e) } }
-                    itemSection("Unread", library.unread) { e in NavigationLink(value: e.item.id) { row(e) } }
-                }
-                .ayuSurface(Ayu.panel)
-            }
-        }
-        .navigationTitle("Reading")
-        .refreshable { library.refresh() }
-    }
-
-    /// Ticket 20: magazine issues shared from this device (or another) that the Mac hasn't split yet.
-    @ViewBuilder private var pendingSection: some View {
         if !library.pendingIssues.isEmpty {
             Section("Magazine issues") {
                 ForEach(library.pendingIssues, id: \.issueID) { issue in
@@ -167,28 +139,6 @@ struct ReadingList: View {
                     }
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private func itemSection<Row: View>(_ title: String, _ items: [IndexedItem],
-                                        @ViewBuilder row: @escaping (IndexedItem) -> Row) -> some View {
-        if !items.isEmpty {
-            Section(title) { ForEach(items, id: \.item.id) { row($0) } }
-        }
-    }
-
-    /// Unread rows show no percentage.
-    private func row(_ e: IndexedItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(e.item.title).font(.body.weight(.medium))
-            HStack(spacing: 6) {
-                Image(systemName: e.item.type.symbol)
-                if e.item.status == .reading { Text("\(Int(e.item.progress * 100))%") }
-                if let a = e.item.author { Text("· \(a)").lineLimit(1) }
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            if e.item.needsTranscript { TranscriptPendingLabel() }
         }
     }
 }

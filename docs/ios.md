@@ -47,7 +47,7 @@ FocusLibrary
   ├─ SharedFilePresenter on menu.json (NSFilePresenter): a second "the Mac wrote a new pick" signal
   └─ CurrentFocus.load (DeepwellMenu): MenuStore.load() only, then QueueProgress over the index's items
 MobileRootView
-  ├─ compact width (iPhone, iPad Slide Over/narrow Split View): TabView, Current Focus, Reading, Library and Settings,
+  ├─ compact width (iPhone, iPad Slide Over/narrow Split View): TabView, Current Focus, Library and Settings,
   │  each a NavigationStack
   └─ regular width (iPad): NavigationSplitView, sidebar → queue → reader
 MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownBody, YouTubeTranscriptView, PodcastPlayerView
@@ -174,7 +174,7 @@ iCloud ────────────────────────�
   second marker, an issue that already has articles gets no marker, and the inbox file is removed only once staged,
   so an interrupted hand-off finishes on the next foreground.
 - **"Splitting on Mac".** `FocusLibrary.pendingIssues` (after each index sync): markers in `issues/` whose issue id is
-  on no indexed article. They show as a "Magazine issues" section at the top of Reading. When the Mac's articles arrive
+  on no indexed article. They show as a "Magazine issues" section at the top of the Library (it was at the top of Reading until that tab was removed). When the Mac's articles arrive
   the row disappears; they're ordinary `magazine-article` items from then on.
 - **The phone never splits, transcribes or writes `menu.json`.** The iOS app links DeepwellMagazines only for
   `IssueHandOff` / `PendingIssue` (and so PDFKit, which needs no purpose string). It never downloads evicted originals
@@ -195,10 +195,10 @@ iCloud ────────────────────────�
   Into / Accept / Delete; swipe left to delete, right to rename or accept. "Show Items" filters the Library to that
   tag. `FocusLibrary` is a `TagsModel`: each action runs `TagCurator` with `SharedConfig.deviceName`, which appends
   the op to `.deepwell/tag-ops.jsonl` and rewrites the affected files (coordinated). See docs/tag-curation.md.
-- **Reading** now lists what's left to read: "Magazine issues" (ticket 20, "Splitting on Mac"), then "Reading"
-  (status `reading`, with the percentage), then "Unread" (status `unread`, no percentage), each newest capture first.
-  Done items aren't listed, and empty sections are left out. "Nothing to read" shows only when all three are empty.
-  Opening an unread item and reading moves it to Reading (the reader writes status/progress; `itemChanged()` reloads).
+- **Reading tab: removed (2026-11-11, at the user's request).** It duplicated the Library, whose status filter gives
+  the same in-progress and unread lists. Its "Magazine issues" section ("Splitting on Mac", ticket 20) moved to the top
+  of the Library (`PendingIssuesSection`), shown when nothing is searched or filtered. The iPad sidebar has no Reading
+  row either.
 - The phone heals files from the tag-ops log like the Mac (`LibrarySync`), replays it in conflict merges, and its
   tagging (`PhoneTagger` → `TaggingService`) uses the replayed tag list.
 
@@ -343,7 +343,7 @@ Not verified (needs a device, checklist):
 Not verified (needs a device, checklist):
 
 1. share a PDF from Files (and an EPUB from Books or a PDF from Mail): the sheet shows the title and "Magazine issue",
-   Save closes it; opening Deepwell shows it under Reading > Magazine issues as "Splitting on Mac";
+   Save closes it; opening Deepwell shows it under Library > Magazine issues as "Splitting on Mac";
 2. with the Mac running (and an Anthropic key set), the issue is split into articles without touching the Mac, and the
    phone's row disappears once they sync;
 3. a podcast episode shared on the phone without a published transcript is transcribed on the Mac without touching
@@ -374,8 +374,8 @@ Not verified (needs a device, checklist):
    show the change after a sync, and `.deepwell/tag-ops.jsonl` has one line per action;
 3. rename (or delete) a tag on one device while the other is offline with an item carrying it open; reconnect: the
    old tag doesn't come back on either device, in the file or in the tag list;
-4. Reading tab on iPhone and iPad: Magazine issues, then Reading (with percentages), then Unread; opening an unread
-   item and scrolling moves it to Reading.
+4. (Superseded: the Reading tab was removed on 2026-11-11.) The Library's "Magazine issues" section on iPhone and
+   iPad shows an issue that is still splitting on the Mac.
 
 ## Verified for ticket 17 (2026-11-11)
 

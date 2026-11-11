@@ -19,7 +19,7 @@ struct LibraryScreen: View {
         list
             .ayuSurface(Ayu.panel)
             .overlay {
-                if library.libraryItems.isEmpty {
+                if library.libraryItems.isEmpty && (searching || filtered || library.pendingIssues.isEmpty) {
                     if searching || filtered {
                         ContentUnavailableView("No matches", systemImage: "magnifyingglass",
                                                description: Text(filtered ? "Try clearing the filters." : ""))
@@ -47,11 +47,13 @@ struct LibraryScreen: View {
         if let selection {
             List(selection: selection) {
                 filterSummary
+                if !searching && !filtered { PendingIssuesSection(library: library) }
                 ForEach(library.libraryItems, id: \.item.id) { e in row(e).tag(e.item.id) }
             }
         } else {
             List {
                 filterSummary
+                if !searching && !filtered { PendingIssuesSection(library: library) }
                 ForEach(library.libraryItems, id: \.item.id) { e in NavigationLink(value: e.item.id) { row(e) } }
             }
         }

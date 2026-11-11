@@ -19,10 +19,6 @@ final class FocusLibrary {
 
     /// nil until menu.json has been read once.
     private(set) var focus: CurrentFocus?
-    /// Items being read (status `reading`), newest capture first.
-    private(set) var inProgress: [IndexedItem] = []
-    /// Items not started (status `unread`), newest capture first: the Reading tab's "Unread" section.
-    private(set) var unread: [IndexedItem] = []
 
     // Library tab (ticket 19): the whole index, filtered and searched like the Mac's list.
     /// Full-text search over the per-device index (title, author, tags, body); empty lists everything.
@@ -189,8 +185,6 @@ final class FocusLibrary {
             let list = try index.list()
             allItems = list.map(\.item)
             byID = Dictionary(list.map { ($0.item.id, $0) }, uniquingKeysWith: { a, _ in a })
-            inProgress = list.filter { $0.item.status == .reading }
-            unread = list.filter { $0.item.status == .unread }
             focus = focus?.updating(items: allItems)
             pinFocus()
         } catch {

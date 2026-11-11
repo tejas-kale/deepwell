@@ -50,9 +50,6 @@ private struct PhoneRoot: View {
             Tab(MobileSection.focus.title, systemImage: MobileSection.focus.symbol, value: .focus) {
                 NavigationStack { FocusQueueList(library: library).readerDestination(library) }
             }
-            Tab(MobileSection.reading.title, systemImage: MobileSection.reading.symbol, value: .reading) {
-                NavigationStack { ReadingList(library: library).readerDestination(library) }
-            }
             Tab(MobileSection.library.title, systemImage: MobileSection.library.symbol, value: .library) {
                 NavigationStack { LibraryScreen(library: library).readerDestination(library) }
             }
@@ -78,7 +75,6 @@ private struct PadRoot: View {
         } content: {
             switch section ?? .focus {
             case .focus: FocusQueueList(library: library, selection: $itemID)
-            case .reading: ReadingList(library: library, selection: $itemID)
             case .library: LibraryScreen(library: library, selection: $itemID)
             case .settings: SettingsScreen()
             }
