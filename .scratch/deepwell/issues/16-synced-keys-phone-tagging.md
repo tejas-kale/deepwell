@@ -4,7 +4,7 @@
 
 **Blocked by:** 15
 
-**Status:** done (branch `ticket-16-synced-keys`), with these unverified on devices: the Mac's key migration on the TestFlight install, a key entered on one device appearing on the other, and phone tagging end to end (needs ticket 18's capture to record items)
+**Status:** done (branch `ticket-16-synced-keys`), merged to main. Confirmed on devices (user, 2026-11-11): the Mac's keys migrated on the TestFlight install, and the phone shows both keys from the Mac. Not yet verified: a key replaced on one device reaching the other (both ways), the SMTP password still working, and phone tagging end to end (needs ticket 18's capture to record items)
 
 - [x] `APIKeyStore` keychain implementation uses `kSecAttrSynchronizable = true` and a shared keychain access group (both apps, both platforms). On first launch the Mac re-saves existing device-local keys as synchronizable, then deletes the old items
 - [x] SMTP password (Kindle) stays device-local and Mac-only

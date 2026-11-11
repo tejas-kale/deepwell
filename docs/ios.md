@@ -149,7 +149,11 @@ the team, the app group, the iCloud container and the embedded profile, then val
   exported app's entitlements: `keychain-access-groups` = `NDMG62GXZA.com.tejaskale.deepwell`, the iCloud container
   (Production), and `group.com.tejaskale.deepwell`. Info.plist: `DeepwellKeychainGroup` expanded to the same group,
   `BGTaskSchedulerPermittedIdentifiers`, `UIBackgroundModes` = `processing`.
-- Not verified, on devices: Settings, a key entered on the Mac showing here (and the reverse), the background task.
+- On devices, confirmed by the user on 2026-11-11: after installing Mac build 6 from TestFlight both keys still show
+  as set (the migration ran), and iOS build 6's Settings shows both keys set (synced from the Mac through iCloud
+  Keychain).
+- Not verified, on devices: replacing a key on one device and seeing it on the other (both ways), the SMTP password
+  still working on the Mac, the background task.
   Phone tagging can't run end to end until ticket 18 records captures.
 
 ## Not verified

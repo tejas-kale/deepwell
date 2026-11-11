@@ -72,7 +72,8 @@ Verified: `KeychainStoreTests` checks every query for the synchronizable attribu
 protection keychain, plus each migration path and that SMTP and other items are untouched. `PhoneTaggingTests`
 checks the skip rule, ledger settling, and a racing tag from the other device. Both signed builds (Mac and iOS 6)
 carry `keychain-access-groups` = `NDMG62GXZA.com.tejaskale.deepwell` and processed VALID.
-Not verified: real iCloud Keychain behaviour (the migration on the installed Mac, a key crossing devices), and
+Confirmed by the user on 2026-11-11: the installed Mac build 6 migrated both keys (still set), and the iPhone shows
+both keys from the Mac. Not verified: a replaced key crossing devices (both ways), the SMTP password afterwards, and
 the BGProcessingTask on a device. Phone tagging end to end waits for ticket 18.
 
 ## Summary (persisted)
