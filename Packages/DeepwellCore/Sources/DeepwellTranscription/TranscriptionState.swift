@@ -1,4 +1,5 @@
 import Foundation
+import DeepwellModel
 
 /// What the library UI shows for an item that needs (or is getting) a transcript.
 public enum TranscriptionStatus: Equatable, Sendable {
@@ -20,7 +21,12 @@ public struct PersistedJob: Codable, Equatable, Sendable {
     public var id: String
     public var title: String
     public var failure: String?
-    public init(id: String, title: String, failure: String? = nil) { self.id = id; self.title = title; self.failure = failure }
+    /// The item's `ProcessingClaim` when the library reported it (ticket 20). Not persisted: re-read on every sync.
+    public var claim: ProcessingClaim?
+    public init(id: String, title: String, failure: String? = nil, claim: ProcessingClaim? = nil) {
+        self.id = id; self.title = title; self.failure = failure; self.claim = claim
+    }
+    enum CodingKeys: String, CodingKey { case id, title, failure }
 }
 
 public final class TranscriptionStateStore {

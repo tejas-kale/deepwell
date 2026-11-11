@@ -47,7 +47,9 @@ final class LibraryModel {
     private var watcher: LibraryWatcher?
     private var syncTask: Task<Void, Never>?
 
-    init(location: LibraryLocation) {
+    /// `onLibraryChange`: after every settled burst of library changes (ticket 20 hands these to the split and
+    /// transcription passes).
+    init(location: LibraryLocation, onLibraryChange: @escaping @MainActor () -> Void = {}) {
         self.location = location
         self.folder = location.url
         do {
@@ -61,8 +63,9 @@ final class LibraryModel {
         reload()
         scheduleSync()
         // NSMetadataQuery in the iCloud container (changes, downloads, conflicts), FSEvents in the local fallback.
-        watcher = LibraryWatcher(location: location, onChange: { [weak self] in
-            Task { @MainActor in self?.scheduleSync() }
+        // `downloadsIssues`: magazine originals and markers handed over from the phone (ticket 20).
+        watcher = LibraryWatcher(location: location, downloadsIssues: true, onChange: { [weak self] in
+            Task { @MainActor in self?.scheduleSync(); onLibraryChange() }
         }, onConflicts: { [weak self] urls in
             // Already on a background queue: merge each item's conflict versions into the current file.
             var failures: [String] = []

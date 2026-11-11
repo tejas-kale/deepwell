@@ -3,6 +3,7 @@ import Observation
 import DeepwellLibrary
 import DeepwellCapture
 import DeepwellPodcasts
+import DeepwellMagazines
 
 /// Finds the library: the iCloud container's `Documents/`, resolved off the main thread. There is no local fallback
 /// on iOS (spec): signed out of iCloud, or iCloud Drive off for Deepwell, means a clear empty state and no library.
@@ -67,6 +68,7 @@ final class MobileAppModel {
         ingesting = Task {
             repeat {
                 ingestAgain = false
+                await handOffIssues()
                 guard ingestor.hasPending else { continue }
                 let result = await Task.detached {
                     await ingestor.ingest(into: store) { name in await tagger.recordCapture(fileName: name) }
@@ -76,6 +78,22 @@ final class MobileAppModel {
             } while ingestAgain
             ingesting = nil
         }
+    }
+
+    /// Ticket 20: PDFs and EPUBs the Share Extension queued go into `issues/` with a pending-split marker (coordinated
+    /// copy, no parsing); the Mac splits them. A file stays queued until it is staged.
+    private func handOffIssues() async {
+        let inbox = SharedConfig.magazineInboxDirectory
+        guard FileManager.default.fileExists(atPath: inbox.path) else { return }
+        let store = store, device = SharedConfig.deviceName
+        let outcomes = await Task.detached {
+            (try? store.withAccess { IssueHandOff.drain(inbox: inbox, intoLibrary: $0, device: device) }) ?? []
+        }.value
+        guard !outcomes.isEmpty else { return }
+        library?.refresh()
+        let n = outcomes.count
+        captureStatus = n == 1 ? "Saved 1 magazine issue; your Mac splits it into articles."
+            : "Saved \(n) magazine issues; your Mac splits them into articles."
     }
 
     private static func describe(_ r: InboxIngestor.Result) -> String? {

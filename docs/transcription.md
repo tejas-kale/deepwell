@@ -20,6 +20,26 @@ Package target `DeepwellTranscription` (in `Packages/DeepwellCore`). Consumes th
   ticket 02 should add `if let s = transcription.queue.status(for: item.id) { TranscriptionStatusView(status: s) { ... retry(id:) } }`.
   The reader should show the placeholder until the status disappears. `AppModel.transcription` owns the controller.
 
+## Phone hand-offs and claims (ticket 20)
+
+- Items captured anywhere (the iPhone writes `needs_transcript: true` for podcasts without a published transcript and
+  for shared YouTube links) are found by the same `sync()`: on launch, every 30 s, after a Mac capture, and (ticket 20)
+  on every settled `NSMetadataQuery` change (`LibraryModel` → `AppModel.libraryChanged()`), so a phone capture is
+  queued as soon as it arrives. Items already in the queue aren't added twice.
+- **Claims.** `TranscriptionQueue(device:now:)`: before fetching audio, `TranscriptionLibrary.claim(id:device:at:)`
+  writes `processing_by: <device>` and `processing_at: <ISO 8601>` into the item's frontmatter in one coordinated
+  read-modify-write. It refuses if `needs_transcript` is gone or another device holds a live claim
+  (`ProcessingClaim`, DeepwellModel, 1-hour expiry). `sync()` leaves out items with another device's live claim, so the
+  second Mac shows nothing for them and picks them up once the claim lapses. Success clears the claim with
+  `needs_transcript`; failure or cancellation calls `release(id:device:)`, so another Mac can try. A Mac's own claim
+  never blocks it (a crash mid-job resumes on relaunch). Without a `device` (tests, older callers) no claims are read
+  or written.
+- Conflicts: the claim keys are ordinary extra frontmatter, so `ConflictMerge` takes the union by key with the
+  current version winning. A stale claim that comes back expires within the hour.
+- Tests: `ClaimTests` (8): frontmatter round trip, expiry, phone captures discovered → claimed → cleared, another
+  Mac's live claim respected then taken over after expiry, a claim arriving between sync and work, the claim present
+  while transcribing, release on failure, claims opt-in.
+
 ## Audio sources
 
 - **Podcasts (ticket 07):** pass `resolvers: [.podcast: <resolver>]` to `TranscriptionController`; the resolver returns the

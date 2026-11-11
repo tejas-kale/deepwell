@@ -19,7 +19,9 @@ final class MagazineController {
     init(library: LibraryFolderStore, keys: APIKeyStore = MacKeys.anthropic, onNewArticles: @escaping () -> Void) {
         self.library = library
         self.onNewArticles = onNewArticles
-        service = MagazineService(library: library, model: AnthropicIssueSplitter(keys: keys), keys: keys)
+        // Ticket 20: claims (`device`) so a second Mac on the same library leaves an issue this one is splitting alone.
+        service = MagazineService(library: library, model: AnthropicIssueSplitter(keys: keys), keys: keys,
+                                  device: SharedConfig.deviceName)
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.run() }
         }

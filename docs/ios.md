@@ -100,7 +100,7 @@ behaves the same; the podcast "no transcript yet" text says "your Mac" instead o
 ```
 Safari, share sheet ─ DeepwellPreprocessing.js (in the page, with the user's logins) ─┐
 YouTube / Podcasts / any app ─ shared URL (or text with a URL) ───────────────────────┤ DeepwellMobileShare
-Files / Books / Mail ─ PDF, EPUB ─ "Not yet on iPhone" (ticket 20), nothing stored     │ (SwiftUI sheet: title, type, Save)
+Files / Books / Mail ─ PDF, EPUB ─ "Magazine issue" (ticket 20, see below) ───────────┤ (SwiftUI sheet: title, type, Save)
 Safari, Deepwell in the extensions menu ─ content.js → background.js ─ sendNativeMessage ─ DeepwellMobileSafari
                                                                                        ▼
                          group.com.tejaskale.deepwell/Inbox/*.json (CaptureInbox, temp-then-rename)
@@ -121,10 +121,10 @@ Safari, Deepwell in the extensions menu ─ content.js → background.js ─ sen
   `DeepwellYouTube.capture`, as in the Safari extension, so the published captions are used. The sheet shows the
   title (editable), the type (Article, YouTube video, Podcast episode, Link) and a line about what happens next.
   Save writes the payload into the inbox and closes. If extraction fails, the sheet shows the error in red, and Save
-  keeps the link only. A URL from another app is queued as a link (`CapturePayload.link(_:title:)`). PDF and EPUB
-  are accepted by the activation rule but not stored: "Not yet on iPhone" (ticket 20 defines the hand-off). The
-  extension links DeepwellCapture and DeepwellYouTube only, not DeepwellPodcasts, which would pull in the Speech
-  framework.
+  keeps the link only. A URL from another app is queued as a link (`CapturePayload.link(_:title:)`). A PDF or EPUB
+  shows "Magazine issue" with the file name as an editable title; Save copies it into the app group's
+  `MagazineInbox/` (ticket 20, "Magazine hand-off" below). The extension links DeepwellCapture and DeepwellYouTube
+  only, not DeepwellPodcasts (the Speech framework) or DeepwellMagazines (PDFKit, the splitter).
 - **Safari Web Extension** (`DeepwellMobileSafari`). The same `Extensions/SafariExtension/Resources` (manifest,
   background, content scripts) and the same `SafariWebExtensionHandler.swift` as the Mac. Only the Info.plist
   (`Extensions/MobileSafariExtension`) and the entitlements differ. `SharedConfig` (Apps/Shared) is now
@@ -138,13 +138,45 @@ Safari, Deepwell in the extensions menu ─ content.js → background.js ─ sen
 - **No transcription on iOS.** A shared YouTube link always takes the no-captions path: oEmbed title and channel,
   `needs_transcript: true`. Captions need the page's player data, which only the in-page JS has, so share from Safari
   to use them. A podcast uses the publisher's transcript when the feed has one. Otherwise it is saved with
-  `needs_transcript: true` and `audio_url`. The Mac's transcription queue picks such items up (ticket 20 makes that
-  automatic for phone captures). The phone shows "Transcript pending on Mac" in the reader (`TranscriptPending` in
+  `needs_transcript: true` and `audio_url`. The Mac's transcription queue picks such items up on its next scan, and
+  (ticket 20) as soon as NSMetadataQuery reports the file arriving. The phone shows "Transcript pending on Mac" in the reader (`TranscriptPending` in
   DeepwellUI, iOS only; the Mac still says "No transcript yet") and under the title in Current Focus and Reading rows.
 - **Mac unchanged.** The Mac keeps its own extensions, group, inbox and drain. `SharedLinkIngestor.drain` still parks
   links it can't resolve (`unsupported: .park` is the default). The only text change: the placeholder bodies say
   "your Mac" instead of "this Mac".
 - Tests: `InboxIngestorTests` (7) and `tests/share-preprocessing.test.js` (4, the built file run in jsdom).
+
+## Magazine hand-off (ticket 20)
+
+```
+Files / Books / Mail ─ share PDF/EPUB ─ DeepwellMobileShare: "Magazine issue", title from the file name, Save
+   │  IssueInbox.enqueue (DeepwellCapture): copy into group.com.tejaskale.deepwell/MagazineInbox/<ms>-<id8>-<title>.pdf
+   ▼  (temp then rename; no parsing, no network)
+MobileAppModel.ingestCaptures() → handOffIssues(): launch and every foreground, before the capture inbox
+   │  IssueHandOff.drain → stage (DeepwellMagazines): SHA-256 issue id, CoordinatedFile.copy into
+   ▼  Documents/issues/<id16>-<slug>.pdf, then the marker Documents/issues/<id16>.pending.json; inbox file removed
+iCloud ─────────────────────────────────────────────────────────────────────────────────────────────────────────▶ Mac
+   Mac: LibraryWatcher(downloadsIssues: true) downloads issues/ files; each settled change → AppModel.libraryChanged()
+        → MagazineController.run() (MagazineService: claim in the marker → split → articles → marker deleted)
+        → TranscriptionQueue.start() (needs_transcript items, claim in the item, wherever they were captured)
+```
+
+- **The marker** is a file in the library (`PendingIssue`): `issue_id`, `file`, `title`, `shared_at`, `shared_from`
+  and, while a Mac works on it, `processing_by` / `processing_at`. The Mac sees it through iCloud like any other file;
+  no index row is involved. The split queue itself is still "an original with no article carrying its `issue_id`"
+  (docs/magazines.md), so a marker that is lost or arrives late only affects the phone's label.
+- **Once only.** The issue id is the hash of the bytes. Staging the same file again copies nothing and writes no
+  second marker, an issue that already has articles gets no marker, and the inbox file is removed only once staged,
+  so an interrupted hand-off finishes on the next foreground.
+- **"Splitting on Mac".** `FocusLibrary.pendingIssues` (after each index sync): markers in `issues/` whose issue id is
+  on no indexed article. They show as a "Magazine issues" section at the top of Reading. When the Mac's articles arrive
+  the row disappears; they're ordinary `magazine-article` items from then on.
+- **The phone never splits, transcribes or writes `menu.json`.** The iOS app links DeepwellMagazines only for
+  `IssueHandOff` / `PendingIssue` (and so PDFKit, which needs no purpose string). It never downloads evicted originals
+  (`downloadsIssues` is off), only reads a marker when listing it.
+- **Device names** (`SharedConfig.deviceName`): "iPhone (3fa2c1)" / "<Mac name> (ab12cd)"; the short id is kept in each
+  app's defaults so two Macs with the same name still tell their claims apart.
+- Tests: `HandOffTests` (9, DeepwellMagazines), `ClaimTests` (8, DeepwellTranscription), `IssueInboxTests` (1).
 
 ## Settings and tagging (ticket 16)
 
@@ -242,6 +274,36 @@ Not verified (needs a device, checklist):
 5. the Safari extension button (Settings > Apps > Safari > Extensions > Deepwell on, site allowed) → saved;
 6. tagging after a phone capture (Settings > Tagging says "Saved 1 shared item." and then "Tagged 1 item(s).");
 7. a PDF from Files shows "Not yet on iPhone".
+
+## Verified for ticket 20 (2026-11-11)
+
+- `swift test`: 13 bundles, 251 tests, 0 failures (new: `HandOffTests` 9, `ClaimTests` 8, `IssueInboxTests` 1).
+  `npm test` in `Extensions/SafariExtension`: 25 tests, 0 failures.
+- The Mac scheme, `-scheme DeepwellMobile` and `-scheme DeepwellUI` (iOS Simulator) build with `CODE_SIGNING_ALLOWED=NO`.
+- iOS 0.1.0 (8): exported `.ipa` entitlements as for build 7 (the app: team, iCloud container Production/CloudDocuments,
+  `group.com.tejaskale.deepwell`, `keychain-access-groups` `NDMG62GXZA.com.tejaskale.deepwell`; each extension: team,
+  own App ID, the iOS group only). The Share Extension links no Speech, AVFoundation or PDFKit and none of
+  DeepwellTranscription / DeepwellPodcasts / DeepwellMagazines. The app newly links PDFKit (no purpose string needed).
+  Uploaded (delivery `ac75e6ec-3cff-40c6-85a3-ddb1cf34ca57`), processed VALID.
+- Mac 0.1.0 (8): archive and export-only run succeeded; the archive's entitlements (app and both extensions) are
+  identical to build 7 and PlugIns are still the two Mac extensions. The upload run's export then failed with
+  "No Accounts" / "No signing certificate Mac App Distribution": Xcode had been signed out of the Apple ID (its account
+  list was empty), so cloud-managed distribution signing was unavailable. Not uploaded; see the ticket's status.
+- Device results reported for earlier tickets (user, 2026-11-11): ticket 18's Safari article share, logged-in
+  article, YouTube app share and Apple Podcasts share work; the Mac's Settings > AI tab (build 7) works. Ticket 15's
+  checks, ticket 16's Kindle SMTP password and ticket 18's Safari extension button and tagging after a phone capture
+  are still to be tested in everyday use. Ticket 18's "Not yet on iPhone" check is replaced by ticket 20's hand-off.
+
+Not verified (needs a device, checklist):
+
+1. share a PDF from Files (and an EPUB from Books or a PDF from Mail): the sheet shows the title and "Magazine issue",
+   Save closes it; opening Deepwell shows it under Reading > Magazine issues as "Splitting on Mac";
+2. with the Mac running (and an Anthropic key set), the issue is split into articles without touching the Mac, and the
+   phone's row disappears once they sync;
+3. a podcast episode shared on the phone without a published transcript is transcribed on the Mac without touching
+   it (a YouTube item is picked up too, but YouTube audio is still a stub on the Mac, docs/transcription.md, so it
+   fails there with the retryable "no audio" error, exactly as a Mac capture does);
+4. two Macs on the same library don't both split the same issue or transcribe the same item.
 
 ## Not verified
 

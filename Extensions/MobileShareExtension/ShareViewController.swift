@@ -9,8 +9,9 @@ import DeepwellYouTube
 ///   page itself, with the user's logins. If it failed, the error is shown and Save keeps the link only.
 /// - A URL from any other app (YouTube, Podcasts, …): saved as a link; the app resolves it with the podcast and YouTube
 ///   pipelines when it next opens.
-/// - PDF/EPUB: accepted but not stored yet (ticket 20 brings magazine import to the phone).
-/// Everything goes into the app group's `CaptureInbox`. No network calls and no tagging here.
+/// - PDF/EPUB (ticket 20): copied into the app group's magazine inbox (`IssueInbox`); the app moves it into `issues/`
+///   with a pending-split marker and the Mac splits it into articles.
+/// Captures go into the app group's `CaptureInbox`. No network calls, no parsing and no tagging here.
 final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -31,12 +32,15 @@ final class ShareModel {
     enum Phase {
         case loading
         case ready(ShareDraft)
-        case magazine
+        case magazine(SharedIssue)
         case failed(String)
         case saved
     }
 
     private(set) var phase = Phase.loading
+    var canSave: Bool {
+        switch phase { case .ready, .magazine: true; default: false }
+    }
     var title = ""
     private weak var context: NSExtensionContext?
 
@@ -47,13 +51,14 @@ final class ShareModel {
         let providers = (context?.inputItems as? [NSExtensionItem])?.flatMap { $0.attachments ?? [] } ?? []
         let draft = await ShareDraft.make(providers: providers, sheetTitle: item?.attributedContentText?.string)
         switch draft {
-        case .some(.magazine): phase = .magazine
+        case .some(.magazine(let issue)): title = issue.title; phase = .magazine(issue)
         case .some(.draft(let d)): title = d.payload.title; phase = .ready(d)
         case nil: phase = .failed("There's nothing here Deepwell can save. Share a web page, a link, a video or a podcast episode.")
         }
     }
 
     func save() {
+        if case .magazine(let issue) = phase { return saveIssue(issue) }
         guard case .ready(let draft) = phase else { return }
         var payload = draft.payload
         let edited = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -70,7 +75,23 @@ final class ShareModel {
         }
     }
 
+    private func saveIssue(_ issue: SharedIssue) {
+        let edited = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try IssueInbox(directory: SharedConfig.magazineInboxDirectory).enqueue(issue.file, name: edited.isEmpty ? issue.title : edited)
+            issue.discard()
+            phase = .saved
+            Task {
+                try? await Task.sleep(for: .milliseconds(700))
+                context?.completeRequest(returningItems: nil)
+            }
+        } catch {
+            phase = .failed("Couldn't save: \(error.localizedDescription)")
+        }
+    }
+
     func cancel() {
+        if case .magazine(let issue) = phase { issue.discard() }
         context?.cancelRequest(withError: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
     }
 }
@@ -84,13 +105,14 @@ struct ShareDraft {
     /// Shown in red: extraction failed and only the link will be saved.
     var problem: String?
 
-    enum Made { case draft(ShareDraft), magazine }
+    enum Made { case draft(ShareDraft), magazine(SharedIssue) }
 
     private static let issueTypes = [UTType.pdf.identifier, "org.idpf.epub-container"]
 
     static func make(providers: [NSItemProvider], sheetTitle: String?) async -> Made? {
-        if providers.contains(where: { p in issueTypes.contains { p.hasItemConformingToTypeIdentifier($0) } }) {
-            return .magazine
+        for p in providers {
+            guard let type = issueTypes.first(where: { p.hasItemConformingToTypeIdentifier($0) }) else { continue }
+            if let issue = await SharedIssue.load(p, type: type) { return .magazine(issue) }
         }
         // Safari ran DeepwellPreprocessing.js: the results come as a property list.
         for p in providers where p.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier) {
@@ -178,6 +200,37 @@ struct ShareDraft {
     }
 }
 
+/// A PDF or EPUB from Files, Books or Mail, copied into the extension's temporary folder while the sheet is up (the
+/// provider's file is only readable inside its callback). Save copies it on into the app group's magazine inbox.
+struct SharedIssue {
+    let file: URL
+    let title: String
+    var isEPUB: Bool { file.pathExtension.lowercased() == "epub" }
+
+    static func load(_ provider: NSItemProvider, type: String) async -> SharedIssue? {
+        let ext = type == UTType.pdf.identifier ? "pdf" : "epub"
+        let suggested = provider.suggestedName
+        return await withCheckedContinuation { cont in
+            _ = provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+                guard let url else { return cont.resume(returning: nil) }
+                let name = suggested.flatMap { $0.isEmpty ? nil : $0 } ?? url.deletingPathExtension().lastPathComponent
+                let title = (name as NSString).pathExtension.lowercased() == ext ? (name as NSString).deletingPathExtension : name
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                let copy = dir.appendingPathComponent("issue.\(ext)")
+                do {
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    try FileManager.default.copyItem(at: url, to: copy)
+                    cont.resume(returning: SharedIssue(file: copy, title: title))
+                } catch {
+                    cont.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    func discard() { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+}
+
 struct ShareSheet: View {
     @Bindable var model: ShareModel
 
@@ -188,7 +241,7 @@ struct ShareSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.cancel() } }
-                    if case .ready = model.phase {
+                    if model.canSave {
                         ToolbarItem(placement: .confirmationAction) { Button("Save") { model.save() }.bold() }
                     }
                 }
@@ -204,9 +257,15 @@ struct ShareSheet: View {
                                    description: Text("It joins your library the next time you open Deepwell."))
         case .failed(let message):
             ContentUnavailableView("Can't save this", systemImage: "exclamationmark.triangle", description: Text(message))
-        case .magazine:
-            ContentUnavailableView("Not yet on iPhone", systemImage: "books.vertical",
-                                   description: Text("Magazine PDFs and EPUBs can't be imported from this device yet. Add them on your Mac for now. Nothing was saved."))
+        case .magazine(let issue):
+            Form {
+                Section {
+                    TextField("Title", text: $model.title, axis: .vertical)
+                    LabeledContent("Type") { Label("Magazine issue", systemImage: "books.vertical") }
+                } footer: {
+                    Text("Saved as one \(issue.isEPUB ? "EPUB" : "PDF"). Your Mac splits it into articles the next time it's on; until then it shows as \"Splitting on Mac\".")
+                }
+            }
         case .ready(let draft):
             Form {
                 Section {

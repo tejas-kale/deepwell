@@ -1,6 +1,8 @@
 import Foundation
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 /// Glue shared by the app and the extensions, on both platforms: where the capture inbox lives.
@@ -30,6 +32,23 @@ enum SharedConfig {
     static var magazineInboxDirectory: URL {
         inboxDirectory.deletingLastPathComponent().appendingPathComponent("MagazineInbox", isDirectory: true)
     }
+
+    /// This device in `ProcessingClaim`s and hand-off markers (ticket 20): the device name plus a short id kept in this
+    /// app's defaults, so two Macs with the same name still tell their claims apart. Apps only (extensions don't claim).
+    static let deviceName: String = {
+        let key = "DeepwellDeviceID"
+        let id = UserDefaults.standard.string(forKey: key) ?? {
+            let new = String(UUID().uuidString.lowercased().prefix(6))
+            UserDefaults.standard.set(new, forKey: key)
+            return new
+        }()
+        #if os(macOS)
+        let name = Host.current().localizedName ?? "Mac"
+        #else
+        let name = UIDevice.current.model   // "iPhone" / "iPad" (the user's device name needs an entitlement)
+        #endif
+        return "\(name) (\(id))"
+    }()
 
     #if os(macOS)
     static let wakeURL = URL(string: "deepwell://inbox")!

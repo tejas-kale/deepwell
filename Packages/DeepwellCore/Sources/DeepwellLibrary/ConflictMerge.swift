@@ -69,6 +69,16 @@ public enum ConflictResolver {
     public static func resolve(_ url: URL) throws -> Outcome {
         var outcome = Outcome()
         guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url), !versions.isEmpty else { return outcome }
+        // Not an item (an issue's `.pending.json` marker, ticket 20): nothing to merge, the current version wins.
+        // For a marker that means whichever claim iCloud kept; the loser sees it on its next pass and backs off.
+        guard url.pathExtension.lowercased() == "md" else {
+            try CoordinatedFile.coordinateWriting(url) { u in
+                for v in versions { v.isResolved = true }
+                try NSFileVersion.removeOtherVersionsOfItem(at: u)
+            }
+            outcome.versionsMerged = versions.count
+            return outcome
+        }
         let others: [Item] = versions.compactMap { v in
             guard let text = try? String(contentsOf: v.url, encoding: .utf8) else { return nil }
             return (try? FrontmatterCodec.decode(text))?.item

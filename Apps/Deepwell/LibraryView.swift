@@ -31,8 +31,9 @@ struct LibraryView: View {
     let tagging: TaggingController
     let kindle: KindleController
 
-    init(location: LibraryLocation, tagging: TaggingController, kindle: KindleController) {
-        _model = State(initialValue: LibraryModel(location: location))
+    init(location: LibraryLocation, tagging: TaggingController, kindle: KindleController,
+         onLibraryChange: @escaping @MainActor () -> Void = {}) {
+        _model = State(initialValue: LibraryModel(location: location, onLibraryChange: onLibraryChange))
         self.tagging = tagging
         self.kindle = kindle
     }

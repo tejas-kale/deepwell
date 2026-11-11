@@ -27,8 +27,14 @@ public final class TranscriptionQueue {
     @ObservationIgnored private let audio: AudioSource
     @ObservationIgnored private let transcriber: Transcriber
     @ObservationIgnored private var worker: Task<Void, Never>?
+    /// This device's name for claims (ticket 20); nil: no claims.
+    @ObservationIgnored private let device: String?
+    @ObservationIgnored private let now: () -> Date
 
-    public init(library: TranscriptionLibrary, store: TranscriptionStateStore, audio: AudioSource, transcriber: Transcriber) {
+    public init(library: TranscriptionLibrary, store: TranscriptionStateStore, audio: AudioSource, transcriber: Transcriber,
+                device: String? = nil, now: @escaping () -> Date = { Date() }) {
+        self.device = device
+        self.now = now
         self.library = library
         self.store = store
         self.audio = audio
@@ -67,8 +73,14 @@ public final class TranscriptionQueue {
         start()
     }
 
+    /// Items another device has a live claim on are left out (and dropped if queued here), so two Macs never run the
+    /// same item; once the claim lapses or is cleared, the next sync brings it back if it still needs a transcript.
     public func sync() {
-        guard let pending = try? library.itemsNeedingTranscript() else { return }
+        guard var pending = try? library.itemsNeedingTranscript() else { return }
+        if let device {
+            let t = now()
+            pending.removeAll { $0.claim?.blocks(device, at: t) == true }
+        }
         let ids = Set(pending.map(\.id))
         entries.removeAll { !ids.contains($0.id) && !$0.status.isActive }
         for p in pending where !entries.contains(where: { $0.id == p.id }) {
@@ -93,12 +105,24 @@ public final class TranscriptionQueue {
 
     private func process(id: String) async {
         var tempFile: URL?
-        defer { if let t = tempFile { try? FileManager.default.removeItem(at: t) } }
+        var claimed = false, finished = false
+        defer {
+            if let t = tempFile { try? FileManager.default.removeItem(at: t) }
+            if claimed, !finished, let device { try? library.release(id: id, device: device) }
+        }
         do {
             guard let doc = try library.load(id: id), doc.item.needsTranscript else {
                 entries.removeAll { $0.id == id }   // already transcribed or deleted
                 persist()
                 return
+            }
+            if let device {
+                guard try library.claim(id: id, device: device, at: now()) else {
+                    entries.removeAll { $0.id == id }   // another Mac took it meanwhile
+                    persist()
+                    return
+                }
+                claimed = true
             }
             set(id, .fetchingAudio(0))
             let fetched = try await audio.fetch(for: doc.item) { [weak self] p in
@@ -115,7 +139,9 @@ public final class TranscriptionQueue {
             guard var fresh = try library.load(id: id) else { throw TranscriptionError.itemMissing }
             fresh.body = TranscriptFormatter.body(for: words, item: fresh.item)
             fresh.item.clearNeedsTranscript()
+            fresh.item.processingClaim = nil
             try library.save(fresh)
+            finished = true
             entries.removeAll { $0.id == id }
             persist()
         } catch is CancellationError {

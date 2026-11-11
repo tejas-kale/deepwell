@@ -124,19 +124,40 @@ struct ReadingList: View {
 
     var body: some View {
         Group {
-            if library.inProgress.isEmpty {
+            if library.inProgress.isEmpty && library.pendingIssues.isEmpty {
                 ContentUnavailableView("Nothing in progress", systemImage: "book",
                                        description: Text("Items you've started reading show up here."))
             } else if let selection {
-                List(library.inProgress, id: \.item.id, selection: selection) { row($0).tag($0.item.id) }
-                    .ayuSurface(Ayu.panel)
+                List(selection: selection) {
+                    pendingSection
+                    ForEach(library.inProgress, id: \.item.id) { row($0).tag($0.item.id) }
+                }
+                .ayuSurface(Ayu.panel)
             } else {
-                List(library.inProgress, id: \.item.id) { e in NavigationLink(value: e.item.id) { row(e) } }
-                    .ayuSurface(Ayu.panel)
+                List {
+                    pendingSection
+                    ForEach(library.inProgress, id: \.item.id) { e in NavigationLink(value: e.item.id) { row(e) } }
+                }
+                .ayuSurface(Ayu.panel)
             }
         }
         .navigationTitle("Reading")
         .refreshable { library.refresh() }
+    }
+
+    /// Ticket 20: magazine issues shared from this device (or another) that the Mac hasn't split yet.
+    @ViewBuilder private var pendingSection: some View {
+        if !library.pendingIssues.isEmpty {
+            Section("Magazine issues") {
+                ForEach(library.pendingIssues, id: \.issueID) { issue in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(issue.title).font(.body.weight(.medium))
+                        Label("Splitting on Mac", systemImage: "books.vertical")
+                            .font(.caption).foregroundStyle(Ayu.accent)
+                    }
+                }
+            }
+        }
     }
 
     private func row(_ e: IndexedItem) -> some View {

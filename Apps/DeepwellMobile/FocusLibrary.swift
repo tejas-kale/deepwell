@@ -4,6 +4,7 @@ import DeepwellModel
 import DeepwellLibrary
 import DeepwellIndex
 import DeepwellMenu
+import DeepwellMagazines
 
 /// The phone's view of the library: the per-device SQLite index (Application Support, built from the container and
 /// kept current by `LibraryWatcher`'s NSMetadataQuery) and the Mac's pick from `.deepwell/menu.json` (read only).
@@ -20,6 +21,8 @@ final class FocusLibrary {
     private(set) var errorMessage: String?
     /// True until the first index sync after launch has finished: rows for items not indexed yet say "Loading".
     private(set) var isIndexing = true
+    /// Ticket 20: issues handed to the Mac (a `.pending.json` marker) that have no articles yet: "Splitting on Mac".
+    private(set) var pendingIssues: [PendingIssue] = []
 
     @ObservationIgnored private var byID: [String: IndexedItem] = [:]
     @ObservationIgnored private var allItems: [Item] = []
@@ -98,7 +101,25 @@ final class FocusLibrary {
             if case .failure(let e) = result { self.errorMessage = "Sync failed: \(e.localizedDescription)" }
             self.isIndexing = false
             self.reloadItems()
+            self.loadPendingIssues()
             self.onSynced()
+        }
+    }
+
+    /// Markers in `issues/` whose issue has no article in the index. Reading a marker evicted on this device downloads
+    /// it (it's tiny); without it the row still shows, titled by the file name.
+    private func loadPendingIssues() {
+        let folder = folder
+        let split = Set(allItems.compactMap(\.issueID))
+        Task { [weak self] in
+            let list = await Task.detached { () -> [PendingIssue] in
+                PendingIssue.markerIDs(inLibrary: folder).filter { !split.contains($0) }.map { id in
+                    PendingIssue.read(issueID: id, inLibrary: folder)
+                        ?? PendingIssue(issueID: id, file: id, title: IssueStore.url(for: id, in: folder)?
+                            .deletingPathExtension().lastPathComponent ?? "Magazine issue")
+                }
+            }.value
+            self?.pendingIssues = list.sorted { ($0.sharedAt ?? .distantPast) > ($1.sharedAt ?? .distantPast) }
         }
     }
 

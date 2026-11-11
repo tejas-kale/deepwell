@@ -21,8 +21,11 @@ public final class LibraryWatcher: @unchecked Sendable {
     private let onSharedStateChange: (@Sendable () -> Void)?
     private var pendingChange: DispatchWorkItem?
     private let latency: TimeInterval
+    private let downloadsIssues: Bool
 
-    public init(location: LibraryLocation, latency: TimeInterval = 0.5,
+    /// `downloadsIssues` (the Mac, ticket 20): also download evicted files in `<library>/issues/` (originals and their
+    /// `.pending.json` markers), so issues handed over from the phone reach the splitter. The phone leaves them evicted.
+    public init(location: LibraryLocation, latency: TimeInterval = 0.5, downloadsIssues: Bool = false,
                 onChange: @escaping @Sendable () -> Void,
                 onConflicts: @escaping @Sendable ([URL]) -> Void = { _ in },
                 onSharedStateChange: (@Sendable () -> Void)? = nil) {
@@ -30,6 +33,7 @@ public final class LibraryWatcher: @unchecked Sendable {
         self.onConflicts = onConflicts
         self.onSharedStateChange = onSharedStateChange
         self.latency = latency
+        self.downloadsIssues = downloadsIssues
         if location.isUbiquitous {
             // NSMetadataQuery must be started on a thread with a run loop; the main one.
             if Thread.isMainThread { startQuery() }
@@ -74,6 +78,12 @@ public final class LibraryWatcher: @unchecked Sendable {
                 continue
             }
             if url.pathComponents.contains(where: { $0.hasPrefix(".") }) { continue }   // .deepwell/, .narration/: not items
+            if Self.isIssueFile(url) {
+                if downloadsIssues, status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded { toDownload.append(url) }
+                if url.lastPathComponent.hasSuffix(".pending.json"),
+                   (item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool) == true { conflicted.append(url) }
+                continue
+            }
             guard url.pathExtension.lowercased() == "md" else { continue }
             if status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded { toDownload.append(url) }
             if (item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool) == true { conflicted.append(url) }
@@ -90,6 +100,11 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// A file directly in the library's `.deepwell/` folder (`menu.json`, later `tag-ops.jsonl`).
     static func isSharedState(_ url: URL) -> Bool {
         url.deletingLastPathComponent().lastPathComponent == ".deepwell" && !url.lastPathComponent.hasPrefix(".")
+    }
+
+    /// A file directly in the library's `issues/` folder (magazine originals and pending-split markers).
+    static func isIssueFile(_ url: URL) -> Bool {
+        url.deletingLastPathComponent().lastPathComponent == "issues" && !url.lastPathComponent.hasPrefix(".")
     }
 
     private func scheduleChange() {

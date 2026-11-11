@@ -56,6 +56,11 @@ That account may use Apple's cloud-managed distribution certificates, so none ar
 key is used only to validate and upload. An App Manager key cannot use cloud signing; passing it to `xcodebuild`
 fails with "Cloud signing permission error".
 
+If the export fails with `exportArchive No Accounts` and `No signing certificate "Mac App Distribution" found`, Xcode
+has been signed out of that Apple ID (`defaults read com.apple.dt.Xcode DVTDeveloperAccountManagerAppleIDLists` shows
+an empty list). Sign in again in Xcode > Settings > Accounts, then re-run with `--keep-build`. Nothing was uploaded,
+so the number is still free (seen 2026-11-11, Mac build 8).
+
 Without `ASC_KEY_ID`/`ASC_ISSUER_ID` the script stops before changing anything and says what is missing. A failed
 run is safe to re-run. It only skips a build number, and `--keep-build` refuses a number that was already uploaded.
 Bump `MARKETING_VERSION` by hand for a user-visible version change.

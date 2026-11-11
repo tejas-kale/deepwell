@@ -19,7 +19,8 @@ final class TranscriptionController {
             library: FolderTranscriptionLibrary(access: folderStore),
             store: TranscriptionStateStore(url: TranscriptionStateStore.defaultURL()),
             audio: AudioSource(resolvers: all),
-            transcriber: AppleSpeechTranscriber())
+            transcriber: AppleSpeechTranscriber(),
+            device: SharedConfig.deviceName)   // ticket 20: claims, so two Macs never transcribe the same item
         // Picks up newly captured items and resumes the persisted queue after launch.
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.queue.start() }

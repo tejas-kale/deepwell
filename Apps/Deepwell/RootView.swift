@@ -13,7 +13,8 @@ struct RootView: View {
         case .ready(let location):
             VStack(spacing: 0) {
                 if let banner = model.banner { StorageBannerView(banner: banner, model: model) }
-                LibraryView(location: location, tagging: model.tagging, kindle: model.kindle).id(location)
+                LibraryView(location: location, tagging: model.tagging, kindle: model.kindle,
+                            onLibraryChange: { [model] in model.libraryChanged() }).id(location)
             }
             .dropDestination(for: URL.self) { urls, _ in
                 let mags = urls.filter { $0.isFileURL && IssueFormat(pathExtension: $0.pathExtension) != nil }

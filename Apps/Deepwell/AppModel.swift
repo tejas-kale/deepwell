@@ -120,6 +120,15 @@ final class AppModel {
 }
 
 extension AppModel {
+    /// Ticket 20: the library changed under us (NSMetadataQuery: a file arrived from the phone or another Mac, or a
+    /// download finished). Split any pending issue and queue any `needs_transcript` item, wherever it was captured.
+    /// Both passes are cheap when there's nothing to do and never run twice at once.
+    func libraryChanged() {
+        guard case .ready = phase else { return }
+        magazines.run()
+        transcription.start()
+    }
+
     /// Entry point for dropped / opened / shared PDF and EPUB files.
     func importMagazines(_ urls: [URL]) {
         guard case .ready = phase else { errorMessage = "The library is still opening. Try again in a moment."; return }

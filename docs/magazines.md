@@ -11,7 +11,18 @@ Code: `Packages/DeepwellCore/Sources/DeepwellMagazines`. App glue: `Apps/Deepwel
 2. **Split (background).** `MagazineService.processPending()` finds originals in `issues/` that no item references via `issue_id`
    (the queue is derived from the library, like tagging: nothing extra persisted, a relaunch resumes). It extracts text, asks the model
    for article boundaries, and writes one `magazine-article` item per article.
-3. **Tag.** Articles are written untagged, so the existing `TaggingService` (ticket 03) tags them on its next pass (`MagazineController` kicks it).
+3. **Hand-offs and claims (ticket 20).** An issue shared on the phone arrives in `issues/` through iCloud with a
+   `<issueID>.pending.json` marker (`PendingIssue`; phone side in docs/ios.md, "Magazine hand-off"). The Mac's
+   `LibraryWatcher(downloadsIssues: true)` downloads evicted originals and markers, and every settled change runs
+   `AppModel.libraryChanged()` → `MagazineController.run()`, on top of launch and the 60 s timer. Before splitting,
+   `MagazineService(device:)` writes its claim (`processing_by`, `processing_at`) into the marker, creating one for an
+   issue imported on a Mac. It skips an issue another device holds a live claim on (`ProcessingClaim`, 1-hour
+   expiry; `RunSummary.skippedClaimed`), deletes the marker once the articles are written, and clears its claim when
+   a pass fails or has no key, leaving the marker. Markers of issues that already have articles (split elsewhere, or
+   a marker arriving after the split) are deleted at the start of each pass. A conflict on a marker keeps the current
+   version (`ConflictResolver`: non-`.md` files aren't merged). Claims are advisory: two Macs claiming within iCloud's
+   sync delay can both split; `write` re-checks under access, and at worst an issue's articles appear twice.
+4. **Tag.** Articles are written untagged, so the existing `TaggingService` (ticket 03) tags them on its next pass (`MagazineController` kicks it).
 
 ## Text extraction (`IssueText.swift`, `Zip.swift`)
 
@@ -61,5 +72,9 @@ Not verified: any real Anthropic call (response quality of Sonnet at splitting a
 (multi-column PDF text order, DRM'd or scanned files, odd EPUBs: nested nav, non-UTF-8 chapters, ZIP64), any UI run (drop, Dock drop, `PDFView`/`WKWebView`
 rendering, jump to page, the reader toggle), the Share Extension in Finder/Books (activation rule, sandbox, that the extension is discovered, app-group container
 unsigned), Dock/"Open With" document types, iCloud eviction of originals (an evicted `.icloud` stub in `issues/` is not found by `IssueStore`).
+Ticket 20 adds `HandOffTests` (9): phone staging writes the marker once and nothing twice, inbox drain, no marker for a
+split issue, Mac discovery → split → marker removed, a second Mac's live claim respected and an expired one taken over,
+claim released on failure, a Mac-side claim marker, stale markers removed, evicted marker placeholders listed. The
+evicted-original gap above is closed for the Mac by `downloadsIssues`; still not verified on real iCloud.
 Known limits: scroll progress/"done" is tracked on the article text view only; one window may open per file opened via the Dock; rebuilding the library
 from only the Markdown loses nothing (position and `issue_id` are in frontmatter) but deleting an issue's articles makes it pending again and re-splits it.
