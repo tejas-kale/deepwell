@@ -25,6 +25,9 @@ struct SettingsScreen: View {
                         Text(settings.taggingModel).tag(settings.taggingModel)
                     }
                 }
+                if let status = app.captureStatus {
+                    Text(status).font(.footnote).foregroundStyle(.secondary)
+                }
                 if let status = app.tagger.lastStatus {
                     Text(status).font(.footnote).foregroundStyle(.secondary)
                 }

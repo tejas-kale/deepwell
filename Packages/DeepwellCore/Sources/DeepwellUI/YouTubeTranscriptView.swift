@@ -55,9 +55,9 @@ public struct YouTubeTranscriptView: View {
     @ViewBuilder private var transcript: some View {
         if item.needsTranscript {
             // Ticket 06 removes the marker once it has replaced the body with a real transcript.
-            ContentUnavailableView("No transcript yet",
+            ContentUnavailableView(TranscriptPending.title,
                                    systemImage: "text.badge.xmark",
-                                   description: Text("This video has no published captions. It is marked needs_transcript and will be transcribed on this Mac."))
+                                   description: Text(TranscriptPending.videoDescription))
         } else if segments.isEmpty {
             // Hand-edited or foreign body: show it as plain text rather than hiding it.
             ScrollView { Text(document.body).textSelection(.enabled).padding() }
@@ -123,3 +123,15 @@ extension YouTubeEmbedView: UIViewRepresentable {
     func updateUIView(_ web: WKWebView, context: Context) { update(web, coordinator: context.coordinator) }
 }
 #endif
+
+/// What an item marked `needs_transcript` says. The phone never transcribes (spec: iPhone/iPad companion), so there
+/// it reads "Transcript pending on Mac" (ticket 18); the Mac transcribes it itself.
+public enum TranscriptPending {
+    #if os(iOS)
+    public static let title = "Transcript pending on Mac"
+    public static let videoDescription = "This video has no published captions. Your Mac will transcribe it; you can already watch it here."
+    #else
+    public static let title = "No transcript yet"
+    public static let videoDescription = "This video has no published captions. It is marked needs_transcript and will be transcribed on this Mac."
+    #endif
+}

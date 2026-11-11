@@ -14,9 +14,9 @@ import DeepwellTranscription
 ///   extension has; so shared YouTube links are always transcribed (which is itself stubbed, see docs/transcription.md).
 public struct SharedLinkIngestor: Sendable {
     public static let youtubePlaceholder =
-        "_No published captions were available for this video. Deepwell will transcribe it on this Mac once on-device transcription is available._"
+        "_No published captions were available for this video. Deepwell will transcribe it on your Mac._"
     public static let podcastPlaceholder =
-        "_This episode has no published transcript. Deepwell will transcribe it on this Mac._"
+        "_This episode has no published transcript. Deepwell will transcribe it on your Mac._"
 
     let http: HTTPClient
     let resolver: PodcastResolver
@@ -67,15 +67,28 @@ public struct SharedLinkIngestor: Sendable {
         public var failures: [String] = []   // user-facing messages
     }
 
-    /// Resolves every queued link and writes the items. Unsupported links are parked; transient failures
-    /// (network, library unavailable) leave the link queued so a later drain retries it.
+    /// What to do with a link that is neither a podcast nor a YouTube video.
+    public enum UnsupportedLinks: Sendable {
+        /// Mac: park it in the inbox's `unsupported/` and report it (open it in Safari and use the extension).
+        case park
+        /// iOS: save a link-only article (`CapturePayload.linkOnlyDocument`); the share sheet already told the user.
+        case saveLinkOnly
+    }
+
+    /// Resolves every queued link and writes the items. Unsupported links are parked (or saved link-only); transient
+    /// failures (network, library unavailable) leave the link queued so a later drain retries it.
     @discardableResult
-    public func drain(inbox: CaptureInbox, into library: LibraryFolderStore) async -> Outcome {
+    public func drain(inbox: CaptureInbox, into library: LibraryFolderStore, unsupported: UnsupportedLinks = .park) async -> Outcome {
         var outcome = Outcome()
         for (file, payload) in inbox.pendingLinks() {
             guard let url = URL(string: payload.url) else { inbox.finishLink(file, handled: false); continue }
             do {
-                let doc = try await document(for: url)
+                let doc: ItemDocument
+                if unsupported == .saveLinkOnly, SharedLink.classify(url) == .unsupported {
+                    doc = payload.linkOnlyDocument()
+                } else {
+                    doc = try await document(for: url)
+                }
                 let saved = try library.withAccess { folder in try ItemFileWriter.write(doc, into: folder) }
                 inbox.finishLink(file, handled: true)
                 outcome.saved.append(saved)

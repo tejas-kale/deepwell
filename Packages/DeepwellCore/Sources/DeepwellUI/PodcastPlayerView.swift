@@ -55,7 +55,7 @@ public struct PodcastPlayerView: View {
 
     @ViewBuilder private var transcript: some View {
         if item.needsTranscript {
-            ContentUnavailableView("No transcript yet", systemImage: "text.badge.xmark",
+            ContentUnavailableView(TranscriptPending.title, systemImage: "text.badge.xmark",
                                    description: Text("This episode has no published transcript. It will be transcribed on your Mac; you can already play the audio."))
         } else if segments.isEmpty {
             ScrollView { Text(document.body).textSelection(.enabled).padding() }

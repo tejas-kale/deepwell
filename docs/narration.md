@@ -40,8 +40,8 @@ iCloud hiccup never wipes narration). iCloud placeholders are downloaded on dema
 
 ## App
 
-- `OpenRouterAccount` holds the shared Keychain key (same item Kindle covers used before). Settings has an OpenRouter
-  tab, and the Kindle tab now just shows whether the key is set.
+- `OpenRouterAccount` holds the shared Keychain key (same item Kindle covers used before). Settings > AI holds the
+  OpenRouter key next to the Anthropic one (one tab since ticket 18), and the Kindle tab just shows whether it is set.
 - Settings > Listen: model and voice pickers (plus a free-form voice ID), and the pronunciation editor: a Written →
   Spoken grid with search, add/remove, bundled entries greyed out with Override, and ▶ preview in the current voice.
 - `NarrationPlayer`: AVAudioPlayer per chunk, rate 0.8–2×, prefetches 2 chunks ahead, polls the playhead at 30 Hz for

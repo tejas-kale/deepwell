@@ -8,8 +8,9 @@ import DeepwellTagging
 /// in the foreground when the app becomes active or the library changes, and in a `BGProcessingTask` once the app
 /// is backgrounded with items still waiting. Never inside an extension.
 ///
-/// What counts as "captured here" is `CaptureLedger`: ticket 18's ingestion calls `recordCapture(fileName:)` after
-/// it writes the item file. Until ticket 18 exists nothing records, so the ledger stays empty and no pass runs.
+/// What counts as "captured here" is `CaptureLedger`: ticket 18's ingestion (`MobileAppModel.ingestCaptures`,
+/// `InboxIngestor`) calls `recordCapture(fileName:)` for every item file it writes from the share sheet or the
+/// Safari extension.
 /// Items the Mac captured are left to the Mac, and any item that already has tags is skipped (`TaggingScope`).
 @Observable
 @MainActor
@@ -31,7 +32,7 @@ final class PhoneTagger {
         ledger = CaptureLedger(defaults: defaults)
     }
 
-    /// The seam ticket 18 calls: an item file this device just wrote into the library.
+    /// Called by the capture ingestion (ticket 18): an item file this device just wrote into the library.
     func recordCapture(fileName: String) {
         ledger.record(fileName)
         kick()

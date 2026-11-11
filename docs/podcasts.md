@@ -22,6 +22,16 @@ Package target `DeepwellPodcasts` (in `Packages/DeepwellCore`); app target `Deep
    `PodcastAudioResolver` (stored `audio_url`, else re-resolved from `source_url`).
 4. **Reader:** `PodcastPlayerView` (AVPlayer streaming `audio_url`) above the transcript; timestamps seek, the playing paragraph is highlighted.
 
+## iOS (ticket 18)
+
+The phone's Share Extension (`DeepwellMobileShare`, docs/ios.md, Capture) queues links the same way, as
+`CapturePayload.link(url, title:)` in `group.com.tejaskale.deepwell/Inbox`. The share sheet's title rides along. The
+phone app resolves them with the same `SharedLinkIngestor`, through `InboxIngestor`, on launch and foreground:
+podcasts with a published timed transcript get it, and everything else is saved with `needs_transcript: true` for the
+Mac. The phone never transcribes. One difference: `drain(…, unsupported: .saveLinkOnly)` saves a link that is neither
+a podcast nor YouTube as a link-only article (`CapturePayload.linkOnlyDocument`), so a share from another app isn't
+lost. The Mac keeps `.park`. The placeholder bodies now say "your Mac".
+
 ## Limitations / not verified
 
 - **Nothing has run against real services or on screen.** Fixtures in `DeepwellPodcastsTests` are hand-written in the shape of the iTunes

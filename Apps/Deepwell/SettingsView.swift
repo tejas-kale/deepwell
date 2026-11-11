@@ -5,7 +5,7 @@ import DeepwellKindle
 import DeepwellMenu
 import DeepwellNarration
 
-/// One Anthropic key: when one is stored it is shown masked with Replace and Remove; otherwise a field to add it.
+/// The Mac's Settings window: General, AI (both API keys), Weekly Menu, Kindle, Listen.
 struct SettingsView: View {
     let tagging: TaggingController
     let kindle: KindleController
@@ -16,10 +16,9 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsView(preferences: preferences).tabItem { Label("General", systemImage: "gearshape") }
-            AnthropicSettingsView(tagging: tagging).tabItem { Label("Anthropic", systemImage: "sparkles") }
+            AISettingsView(tagging: tagging, openRouter: OpenRouterAccount.shared).tabItem { Label("AI", systemImage: "sparkles") }
             MenuSettingsView(preferences: preferences).tabItem { Label("Weekly Menu", systemImage: "square.stack") }
             KindleSettingsView(kindle: kindle).tabItem { Label("Kindle", systemImage: "book") }
-            OpenRouterSettingsView(account: OpenRouterAccount.shared).tabItem { Label("OpenRouter", systemImage: "key") }
             ListenSettingsView(preferences: preferences, libraryFolder: libraryFolder).tabItem { Label("Listen", systemImage: "headphones") }
         }
         .ayuTheme()
@@ -116,7 +115,26 @@ private struct MenuSettingsView: View {
     }
 }
 
-private struct AnthropicSettingsView: View {
+/// The AI tab: the Anthropic and OpenRouter keys, both synced iCloud Keychain items (docs/tagging.md, Keys).
+/// One tab since ticket 18; each key behaves exactly as it did in its own tab.
+private struct AISettingsView: View {
+    let tagging: TaggingController
+    let openRouter: OpenRouterAccount
+
+    var body: some View {
+        Form {
+            AnthropicKeySection(tagging: tagging)
+            OpenRouterKeySection(account: openRouter)
+        }
+        .formStyle(.grouped)
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
+        .ayuTheme()
+    }
+}
+
+/// One Anthropic key: when one is stored it is shown masked with Replace and Remove; otherwise a field to add it.
+private struct AnthropicKeySection: View {
     let tagging: TaggingController
     @State private var draft = ""
     @State private var replacing = false
@@ -126,40 +144,34 @@ private struct AnthropicSettingsView: View {
     private var editing: Bool { !tagging.hasKey || replacing }
 
     var body: some View {
-        Form {
-            Section {
-                if editing {
-                    SecureField("API key", text: $draft, prompt: Text("sk-ant-…"))
-                        .onSubmit(save)
-                    HStack {
-                        Spacer()
-                        if replacing { Button("Cancel") { replacing = false; draft = "" } }
-                        Button(replacing ? "Replace Key" : "Save Key", action: save)
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                } else {
-                    LabeledContent("API key") {
-                        Text(tagging.keyHint ?? "Stored").font(.body.monospaced()).foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Remove…", role: .destructive) { confirmRemove = true }
-                        Button("Replace…") { replacing = true }
-                    }
+        Section {
+            if editing {
+                SecureField("API key", text: $draft, prompt: Text("sk-ant-…"))
+                    .onSubmit(save)
+                HStack {
+                    Spacer()
+                    if replacing { Button("Cancel") { replacing = false; draft = "" } }
+                    Button(replacing ? "Replace Key" : "Save Key", action: save)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                if let error { Text(error).foregroundStyle(Ayu.red) }
-            } header: {
-                Text("Anthropic")
-            } footer: {
-                Text("Used for tagging, magazine splitting and the weekly menu. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
-                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                LabeledContent("API key") {
+                    Text(tagging.keyHint ?? "Stored").font(.body.monospaced()).foregroundStyle(.secondary)
+                }
+                HStack {
+                    Spacer()
+                    Button("Remove…", role: .destructive) { confirmRemove = true }
+                    Button("Replace…") { replacing = true }
+                }
             }
+            if let error { Text(error).foregroundStyle(Ayu.red) }
+        } header: {
+            Text("Anthropic")
+        } footer: {
+            Text("Used for tagging, magazine splitting and the weekly menu. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
+                .font(.caption).foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
-        .ayuTheme()
         .onAppear { tagging.refreshKey() }
         .confirmationDialog("Remove the stored API key?", isPresented: $confirmRemove) {
             Button("Remove Key", role: .destructive) {
@@ -215,7 +227,7 @@ private struct KindleSettingsView: View {
             } header: {
                 Text("Cover art")
             } footer: {
-                Text("Optional. Uses the key in Settings > OpenRouter. Without one, or if image generation fails, a plain cover is used.")
+                Text("Optional. Uses the OpenRouter key in Settings > AI. Without one, or if image generation fails, a plain cover is used.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -293,23 +305,18 @@ private struct SecretRow: View {
 }
 
 /// The one OpenRouter key: Kindle cover art and Listen.
-private struct OpenRouterSettingsView: View {
+private struct OpenRouterKeySection: View {
     let account: OpenRouterAccount
 
     var body: some View {
-        Form {
-            Section {
-                SecretRow(label: "API key", prompt: "sk-or-…", stored: account.hasKey, save: account.save, remove: account.remove)
-            } header: {
-                Text("OpenRouter")
-            } footer: {
-                Text("Used for Listen (text to speech) and Kindle cover art. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+        Section {
+            SecretRow(label: "API key", prompt: "sk-or-…", stored: account.hasKey, save: account.save, remove: account.remove)
+        } header: {
+            Text("OpenRouter")
+        } footer: {
+            Text("Used for Listen (text to speech) and Kindle cover art. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
+                .font(.caption).foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
         .onAppear { account.reload() }
     }
 }

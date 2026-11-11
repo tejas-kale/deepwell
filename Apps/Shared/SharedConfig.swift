@@ -1,12 +1,17 @@
+import Foundation
+#if os(macOS)
 import AppKit
+#endif
 
-/// Glue shared by the app and the Safari extension handler: where the capture inbox lives.
+/// Glue shared by the app and the extensions, on both platforms: where the capture inbox lives.
+/// Mac: `$(TeamIdentifierPrefix)dev.deepwell`; iOS (ticket 18): `group.com.tejaskale.deepwell`. Each Info.plist's
+/// `DeepwellAppGroup` names the group, so the same code finds the right one.
 ///
 /// The extension (sandboxed appex) cannot use the app's security-scoped bookmark, so it drops
 /// captures into a folder both can reach (the app-group container) and the app, which holds the
 /// library bookmark, writes the Markdown files. See "Hand-off" in docs/safari-extension.md.
 enum SharedConfig {
-    /// Injected into both Info.plists from `$(TeamIdentifierPrefix)dev.deepwell` (project.yml).
+    /// From the bundle's Info.plist `DeepwellAppGroup` (project.yml).
     static var appGroupID: String {
         (Bundle.main.object(forInfoDictionaryKey: "DeepwellAppGroup") as? String) ?? "dev.deepwell"
     }
@@ -26,6 +31,7 @@ enum SharedConfig {
         inboxDirectory.deletingLastPathComponent().appendingPathComponent("MagazineInbox", isDirectory: true)
     }
 
+    #if os(macOS)
     static let wakeURL = URL(string: "deepwell://inbox")!
 
     /// Wakes (or launches) the app without bringing it to the front; the app activates itself if the
@@ -35,4 +41,5 @@ enum SharedConfig {
         config.activates = false
         NSWorkspace.shared.open(wakeURL, configuration: config, completionHandler: nil)
     }
+    #endif
 }

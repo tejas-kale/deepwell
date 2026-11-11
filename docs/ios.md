@@ -11,7 +11,9 @@ back to the item files. It is a companion, not a port: it never builds or picks 
 | Target | `Deepwell` | `DeepwellMobile` (product `DeepwellMobile.app`, display name "Deepwell") |
 | Bundle id | `com.tejaskale.deepwell` | `com.tejaskale.deepwell`: the same App ID, so one App Store Connect app ("Deepwell Reader", 6833468100) with a macOS and an iOS platform (universal purchase) |
 | iCloud | `iCloud.com.tejaskale.deepwell`, CloudDocuments | the same container |
-| App group | `$(TeamIdentifierPrefix)dev.deepwell` (capture inbox) | `group.com.tejaskale.deepwell` (iOS needs a `group.` id; unused until ticket 18's extensions) |
+| App group | `$(TeamIdentifierPrefix)dev.deepwell` (capture inbox) | `group.com.tejaskale.deepwell` (iOS needs a `group.` id): the capture inbox of ticket 18's extensions, and the tagger's `CaptureLedger` |
+| Share Extension | `DeepwellShareExtension`, `com.tejaskale.deepwell.ShareExtension` | `DeepwellMobileShare`, `com.tejaskale.deepwell.MobileShare` (ticket 18) |
+| Safari Web Extension | `DeepwellSafariExtension`, `com.tejaskale.deepwell.SafariExtension` | `DeepwellMobileSafari`, `com.tejaskale.deepwell.MobileSafari` (ticket 18) |
 | `NSUbiquitousContainers` | public, "Deepwell" | the same, so Files shows iCloud Drive › Deepwell |
 
 The iOS platform was added to the App Store Connect app on 2026-11-11 through the API (an iOS App Store version 1.0,
@@ -22,6 +24,11 @@ Automatic signing. The archive is development-signed and needs a registered iOS 
 team's iOS Team Provisioning Profile already listed devices, so no registration step was needed. The export re-signs
 for distribution: "Apple Distribution: … (NDMG62GXZA)", profile "iOS Team Store Provisioning Profile:
 com.tejaskale.deepwell", `icloud-container-environment = Production`, `get-task-allow = false`.
+
+The iOS extensions have their own App IDs: no extension id is used on both platforms, so a Mac profile never
+covers an iOS bundle or the other way round. Automatic signing (`-allowProvisioningUpdates`) registered both on the
+first signed archive (2026-11-11). Their entitlements are the team and `group.com.tejaskale.deepwell` only: no iCloud
+container and no `keychain-access-groups`, because an extension makes no network calls and never tags.
 
 Icon: `Design/AppIcon/fullbleed-1024.png` as the single 1024 universal entry in `Apps/DeepwellMobile/Assets.xcassets`
 (no mask or alpha; iOS applies the shape).
@@ -88,6 +95,57 @@ Package changes in this ticket: `resolveContainer()`, the `onSharedStateChange` 
 rule, `PodcastPlayerView` in DeepwellUI (DeepwellUI now depends on DeepwellPodcasts for `Item.audioURL`). The Mac
 behaves the same; the podcast "no transcript yet" text says "your Mac" instead of "this Mac".
 
+## Capture (ticket 18)
+
+```
+Safari, share sheet ─ DeepwellPreprocessing.js (in the page, with the user's logins) ─┐
+YouTube / Podcasts / any app ─ shared URL (or text with a URL) ───────────────────────┤ DeepwellMobileShare
+Files / Books / Mail ─ PDF, EPUB ─ "Not yet on iPhone" (ticket 20), nothing stored     │ (SwiftUI sheet: title, type, Save)
+Safari, Deepwell in the extensions menu ─ content.js → background.js ─ sendNativeMessage ─ DeepwellMobileSafari
+                                                                                       ▼
+                         group.com.tejaskale.deepwell/Inbox/*.json (CaptureInbox, temp-then-rename)
+                                                                                       ▼
+   MobileAppModel.ingestCaptures(): on launch once the container resolves, and on every foreground; one at a time
+     InboxIngestor (DeepwellPodcasts)
+       1. CaptureInbox.drain: extracted payloads → ItemFileWriter (coordinated) → Documents/<date>-<slug>-<id8>.md
+       2. SharedLinkIngestor.drain(unsupported: .saveLinkOnly): podcast → PodcastResolver; YouTube → oEmbed;
+          any other link → a link-only article
+       3. record(fileName) for each file written → PhoneTagger.recordCapture → CaptureLedger → tagging (ticket 16)
+```
+
+- **Share Extension** (`Extensions/MobileShareExtension`). In Safari, `NSExtensionJavaScriptPreprocessingFile` runs
+  `DeepwellPreprocessing.js` in the page. A build phase writes it (`scripts/build-share-preprocessing.sh`): the Safari
+  extension's `readability.js`, `turndown.js`, `turndown-plugin-gfm.js`, `extract.js` and `youtube.js`, unchanged,
+  inside one function, plus `preprocess-shim.js`, which returns the `ExtensionPreprocessingJS` object. It's one JS
+  codebase, so a fix to extraction reaches all three entry points. A YouTube watch page goes through
+  `DeepwellYouTube.capture`, as in the Safari extension, so the published captions are used. The sheet shows the
+  title (editable), the type (Article, YouTube video, Podcast episode, Link) and a line about what happens next.
+  Save writes the payload into the inbox and closes. If extraction fails, the sheet shows the error in red, and Save
+  keeps the link only. A URL from another app is queued as a link (`CapturePayload.link(_:title:)`). PDF and EPUB
+  are accepted by the activation rule but not stored: "Not yet on iPhone" (ticket 20 defines the hand-off). The
+  extension links DeepwellCapture and DeepwellYouTube only, not DeepwellPodcasts, which would pull in the Speech
+  framework.
+- **Safari Web Extension** (`DeepwellMobileSafari`). The same `Extensions/SafariExtension/Resources` (manifest,
+  background, content scripts) and the same `SafariWebExtensionHandler.swift` as the Mac. Only the Info.plist
+  (`Extensions/MobileSafariExtension`) and the entitlements differ. `SharedConfig` (Apps/Shared) is now
+  cross-platform. Its `DeepwellAppGroup` comes from each bundle's Info.plist, and `wakeApp()` is Mac-only, because an
+  iOS extension can't open its app. The toolbar keyboard shortcut is ignored on iOS.
+- **Ingestion.** `InboxIngestor.ingest(into:record:)` writes extracted payloads first, then links, which need the
+  network. Every inbox file is removed as soon as its item is written, and the app keeps one ingestion in flight (a
+  call during a run asks for one more pass). So nothing is written twice. Links that fail for a transient reason
+  (HTTP error, offline) stay queued for the next foreground. Unreadable payloads go to `Inbox/rejected/`. Signed out
+  of iCloud, everything stays queued. Settings > Tagging shows the last result ("Saved 2 shared items.").
+- **No transcription on iOS.** A shared YouTube link always takes the no-captions path: oEmbed title and channel,
+  `needs_transcript: true`. Captions need the page's player data, which only the in-page JS has, so share from Safari
+  to use them. A podcast uses the publisher's transcript when the feed has one. Otherwise it is saved with
+  `needs_transcript: true` and `audio_url`. The Mac's transcription queue picks such items up (ticket 20 makes that
+  automatic for phone captures). The phone shows "Transcript pending on Mac" in the reader (`TranscriptPending` in
+  DeepwellUI, iOS only; the Mac still says "No transcript yet") and under the title in Current Focus and Reading rows.
+- **Mac unchanged.** The Mac keeps its own extensions, group, inbox and drain. `SharedLinkIngestor.drain` still parks
+  links it can't resolve (`unsupported: .park` is the default). The only text change: the placeholder bodies say
+  "your Mac" instead of "this Mac".
+- Tests: `InboxIngestorTests` (7) and `tests/share-preprocessing.test.js` (4, the built file run in jsdom).
+
 ## Settings and tagging (ticket 16)
 
 - **Settings** is a third iPhone tab and a third iPad sidebar row (`SettingsScreen.swift`, `MobileSettings.swift`):
@@ -104,8 +162,8 @@ behaves the same; the podcast "no transcript yet" text says "your Mac" instead o
   The iCloud container and `group.com.tejaskale.deepwell` are unchanged.
 - **Tagging** (`PhoneTagger.swift`): tags only the items this device captured (`CaptureLedger`) that have no tags, in
   the foreground and in a `BGProcessingTask` (`com.tejaskale.deepwell.tagging`) after going to the background. The
-  rules are in docs/tagging.md, "Tagging on the phone". Ticket 18 records captures through
-  `PhoneTagger.recordCapture(fileName:)`; until then the ledger is empty and no pass runs.
+  rules are in docs/tagging.md, "Tagging on the phone". Ticket 18's capture ingestion records every file it writes
+  through `PhoneTagger.recordCapture(fileName:)` (see Capture).
 - New links: DeepwellTagging and DeepwellNarration directly (both were already linked through DeepwellUI) and
   BackgroundTasks.framework. Info.plist gained `DeepwellKeychainGroup`, `BGTaskSchedulerPermittedIdentifiers` and
   `UIBackgroundModes` = `processing`.
@@ -155,6 +213,35 @@ the team, the app group, the iCloud container and the embedded profile, then val
 - Not verified, on devices: replacing a key on one device and seeing it on the other (both ways), the SMTP password
   still working on the Mac, the background task.
   Phone tagging can't run end to end until ticket 18 records captures.
+
+## Verified for ticket 18 (2026-11-11)
+
+- `swift test`: 13 bundles, 233 tests, 0 failures (new: `InboxIngestorTests` 7). `npm test` in
+  `Extensions/SafariExtension`: 25 tests, 0 failures (new: `share-preprocessing.test.js` 4).
+- The Mac scheme, `-scheme DeepwellMobile` and `-scheme DeepwellUI` (iOS Simulator) build with `CODE_SIGNING_ALLOWED=NO`.
+- iOS 0.1.0 (7): exported `.ipa` entitlements: the app has `NDMG62GXZA.com.tejaskale.deepwell`, the iCloud container
+  (Production, CloudDocuments), `group.com.tejaskale.deepwell` and `keychain-access-groups` =
+  `NDMG62GXZA.com.tejaskale.deepwell`. `DeepwellMobileShare.appex` and `DeepwellMobileSafari.appex` have the team, their
+  own App IDs and `group.com.tejaskale.deepwell` only. Neither extension links a privacy-sensitive framework (no Speech),
+  so no new purpose strings were needed. VERIFY SUCCEEDED, uploaded (delivery `e5480389-4649-46d6-9c87-f4e3555d49f1`),
+  processed VALID.
+- Mac 0.1.0 (7) (the AI tab): VERIFY SUCCEEDED, uploaded (delivery `2119ad35-b9ef-4c76-a35d-9875b59d90c5`), processed
+  VALID. The archive's entitlements (app and both extensions) are identical to build 6: `NDMG62GXZA.dev.deepwell`, the
+  iCloud container and `keychain-access-groups` `NDMG62GXZA.com.tejaskale.deepwell` on the app. The archive's
+  PlugIns are still exactly the two Mac extensions; `scripts/unregister-stale-builds.sh` ran afterwards.
+- Device results reported for earlier tickets (user, 2026-11-11): ticket 16's replaced key crossing devices works both
+  ways. Ticket 15's remaining checks are still to be tested in everyday use.
+
+Not verified (needs a device, checklist):
+
+1. Safari share sheet on an article: the title and "Article" show, and Save adds it on the next app open;
+2. a logged-in article (e.g. a Substack paid post) saved with the full text;
+3. YouTube app share → a `youtube` item showing "Transcript pending on Mac"; a Safari share of a captioned video →
+   transcript;
+4. Apple Podcasts share → a `podcast` item (published transcript, or "Transcript pending on Mac");
+5. the Safari extension button (Settings > Apps > Safari > Extensions > Deepwell on, site allowed) → saved;
+6. tagging after a phone capture (Settings > Tagging says "Saved 1 shared item." and then "Tagged 1 item(s).");
+7. a PDF from Files shows "Not yet on iPhone".
 
 ## Not verified
 

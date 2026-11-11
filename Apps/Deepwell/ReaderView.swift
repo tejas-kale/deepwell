@@ -73,7 +73,7 @@ struct ReaderView: View {
                               systemImage: narration?.state == .playing ? "pause.fill" : "headphones")
                     }
                     .disabled(!openRouter.hasKey)
-                    .help(openRouter.hasKey ? "Listen to this article (⇧⌘L)" : "Add an OpenRouter key in Settings > OpenRouter to listen")
+                    .help(openRouter.hasKey ? "Listen to this article (⇧⌘L)" : "Add an OpenRouter key in Settings > AI to listen")
                 }
             }
             ToolbarItem {

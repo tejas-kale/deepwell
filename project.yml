@@ -13,7 +13,7 @@ settings:
     SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "6"
+    CURRENT_PROJECT_VERSION: "7"
     ENABLE_HARDENED_RUNTIME: YES
     # macOS app extensions default to NO; TestFlight rejects any bundle without embedded.provisionprofile
     # (ITMS-90889), so make automatic signing provision the app and both extensions.
@@ -96,9 +96,14 @@ targets:
     platform: iOS
     sources:
       - Apps/DeepwellMobile
+      - Apps/Shared
     dependencies:
       - package: DeepwellCore
         product: DeepwellModel
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - package: DeepwellCore
+        product: DeepwellPodcasts
       - package: DeepwellCore
         product: DeepwellLibrary
       - package: DeepwellCore
@@ -112,6 +117,11 @@ targets:
       - package: DeepwellCore
         product: DeepwellUI
       - sdk: BackgroundTasks.framework
+      # Ticket 18 (docs/ios.md, Capture): both write into the app group's Inbox; the app ingests it.
+      - target: DeepwellMobileShare
+        embed: true
+      - target: DeepwellMobileSafari
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell
@@ -187,3 +197,73 @@ targets:
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)dev.deepwell
         com.apple.security.network.client: false
+  # iOS capture (ticket 18, docs/ios.md). Own App IDs under the shared app id; the Mac's extensions keep
+  # com.tejaskale.deepwell.SafariExtension / .ShareExtension, so no id is used on both platforms. The iOS app group
+  # only: no keychain group (no network calls, no tagging in an extension).
+  DeepwellMobileShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/MobileShareExtension
+        excludes:
+          - preprocess-shim.js
+      - path: Apps/Shared
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - package: DeepwellCore
+        product: DeepwellYouTube
+    postBuildScripts:
+      # NSExtensionJavaScriptPreprocessingFile: the Safari extension's extraction files in one script.
+      - name: Build DeepwellPreprocessing.js
+        script: '"$SRCROOT/scripts/build-share-preprocessing.sh" "$SCRIPT_OUTPUT_FILE_0"'
+        inputFiles:
+          - $(SRCROOT)/scripts/build-share-preprocessing.sh
+          - $(SRCROOT)/Extensions/MobileShareExtension/preprocess-shim.js
+          - $(SRCROOT)/Extensions/SafariExtension/Resources/readability.js
+          - $(SRCROOT)/Extensions/SafariExtension/Resources/turndown.js
+          - $(SRCROOT)/Extensions/SafariExtension/Resources/turndown-plugin-gfm.js
+          - $(SRCROOT)/Extensions/SafariExtension/Resources/extract.js
+          - $(SRCROOT)/Extensions/SafariExtension/Resources/youtube.js
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/DeepwellPreprocessing.js
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell.MobileShare
+        PRODUCT_NAME: DeepwellMobileShare
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Extensions/MobileShareExtension/Info.plist
+        ENABLE_HARDENED_RUNTIME: NO
+    entitlements:
+      path: Extensions/MobileShareExtension/MobileShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tejaskale.deepwell
+  DeepwellMobileSafari:
+    type: app-extension
+    platform: iOS
+    sources:
+      # One codebase with the Mac extension: the same native handler and the same Resources.
+      - path: Extensions/SafariExtension/Native/SafariWebExtensionHandler.swift
+      - path: Extensions/MobileSafariExtension
+      - path: Apps/Shared
+      - path: Extensions/SafariExtension/Resources
+        buildPhase: resources
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellCapture
+      - sdk: SafariServices.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell.MobileSafari
+        PRODUCT_NAME: DeepwellMobileSafari
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Extensions/MobileSafariExtension/Info.plist
+        ENABLE_HARDENED_RUNTIME: NO
+    entitlements:
+      path: Extensions/MobileSafariExtension/MobileSafariExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tejaskale.deepwell

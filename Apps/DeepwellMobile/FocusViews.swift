@@ -97,6 +97,7 @@ struct FocusQueueList: View {
                     if row.status == .reading { Text("· \(Int(row.progress * 100))%") }
                 }
                 .font(.caption).foregroundStyle(.secondary)
+                if entry?.item.needsTranscript == true { TranscriptPendingLabel() }
                 if !row.entry.reason.isEmpty {
                     Text(row.entry.reason).font(.callout).foregroundStyle(.secondary)
                 }
@@ -147,6 +148,15 @@ struct ReadingList: View {
                 if let a = e.item.author { Text("· \(a)").lineLimit(1) }
             }
             .font(.caption).foregroundStyle(.secondary)
+            if e.item.needsTranscript { TranscriptPendingLabel() }
         }
+    }
+}
+
+/// Ticket 18: a video or podcast saved without a published transcript; the Mac transcribes it.
+struct TranscriptPendingLabel: View {
+    var body: some View {
+        Label(TranscriptPending.title, systemImage: "waveform.badge.ellipsis")
+            .font(.caption).foregroundStyle(Ayu.accent)
     }
 }

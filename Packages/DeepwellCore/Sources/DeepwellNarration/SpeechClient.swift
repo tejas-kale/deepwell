@@ -10,7 +10,7 @@ public enum NarrationError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .missingKey: "No OpenRouter key set. Add one in Settings > OpenRouter."
+        case .missingKey: "No OpenRouter key set. Add one in Settings (AI on the Mac)."
         case .api(402, let m): "OpenRouter: out of credits (402)\(m.isEmpty ? "" : ": \(m)")"
         case .api(let s, let m): "OpenRouter error \(s)\(m.isEmpty ? "" : ": \(m)")"
         case .badResponse(let m): "Unexpected OpenRouter reply: \(m)"

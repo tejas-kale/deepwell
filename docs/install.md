@@ -73,7 +73,8 @@ That platform was added on 2026-11-11 (docs/ios.md).
 
 - `scripts/release.sh --platform ios` archives `DeepwellMobile` to `build/release/ios/`, exports
   `DeepwellMobile.ipa`, checks the team, the app group `group.com.tejaskale.deepwell`, the iCloud container and the
-  embedded profile, then validates and uploads with `altool -t ios`. Both platforms then wait for App Store Connect's processing verdict: a build can upload fine and still be rejected (e.g. a missing purpose string). Uploaded numbers go to `build/release/uploaded-ios`.
+  embedded profile. Since ticket 18 it also checks the Share and Safari extensions (`PlugIns/*.appex`): the team, the
+  app group and an embedded profile each. Then it validates and uploads with `altool -t ios`. Both platforms then wait for App Store Connect's processing verdict: a build can upload fine and still be rejected (e.g. a missing purpose string). Uploaded numbers go to `build/release/uploaded-ios`.
   The build number is shared with the Mac (`CURRENT_PROJECT_VERSION`), so each upload of either platform bumps it.
 - The archive is development-signed and needs at least one registered iPhone or iPad in the team. The team already had
   devices on 2026-11-11. On a team without any: connect the device, choose it as the DeepwellMobile run destination in
@@ -81,6 +82,9 @@ That platform was added on 2026-11-11 (docs/ios.md).
 - Install: when the build has processed, open App Store Connect > TestFlight > iOS, add the build to your internal
   group (if the group doesn't pick it up automatically), and install the TestFlight app on the iPhone and iPad, signed in
   with the same Apple ID. Then install Deepwell from TestFlight.
+- Capture on the phone (ticket 18): the share sheet lists Deepwell after the first install (in Safari, also under
+  More… if it's hidden). The Safari extension must be turned on once: Settings > Apps > Safari > Extensions > Deepwell,
+  then allow it on all websites (or per site). Shares are added to the library the next time Deepwell opens.
 - The phone needs iCloud signed in and iCloud Drive on for Deepwell (Settings > your name > iCloud > Drive). Without
   them it shows "iCloud is off": there is no local library on iOS.
 

@@ -47,6 +47,22 @@ xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -derivedDataPath build/d
 - **Shortcut:** Ctrl+Shift+S (not Cmd+Shift+S, Safari's Save As). Declared as `_execute_action`.
 - Saving the same URL twice creates two files (dedupe is a later concern).
 
+## iOS (ticket 18)
+
+The same `Resources/` folder and the same `Native/SafariWebExtensionHandler.swift` also build `DeepwellMobileSafari`, the
+iOS Safari Web Extension (`com.tejaskale.deepwell.MobileSafari`, group `group.com.tejaskale.deepwell`). Only
+`Extensions/MobileSafariExtension/Info.plist` and its entitlements are separate. On iOS the handler can't wake the
+app (`SharedConfig.wakeApp` is Mac-only). The phone app ingests its inbox on launch and on foreground (docs/ios.md,
+Capture). The `commands` shortcut has no effect on iOS. The Mac target is unchanged: its own id, group and Info.plist,
+and still the only Deepwell extension a Mac's Safari lists.
+
+The iOS Share Extension reuses the same files differently: `scripts/build-share-preprocessing.sh` wraps
+`readability.js`, `turndown.js`, `turndown-plugin-gfm.js`, `extract.js` and `youtube.js` with
+`Extensions/MobileShareExtension/preprocess-shim.js` into `DeepwellPreprocessing.js`, its
+`NSExtensionJavaScriptPreprocessingFile`. `tests/share-preprocessing.test.js` builds that file and runs it in jsdom:
+an article, a page with its own `module` global, an unreadable page (error with URL and title) and a YouTube page
+without captions. Edit the extraction files here, never the generated file.
+
 ## Verified vs not
 
 Verified: Swift unit tests, node extraction tests, `xcodebuild build` (unsigned). Not verified: anything running in

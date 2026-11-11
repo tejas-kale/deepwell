@@ -159,6 +159,19 @@ if [[ $PLATFORM == ios ]]; then
   [[ "$groups" == *'group.com.tejaskale.deepwell'* ]] || die "$(basename "$APP") lacks the app group group.com.tejaskale.deepwell"
   [[ "$icloud" == *'iCloud.com.tejaskale.deepwell'* ]] || die "$(basename "$APP") lacks the iCloud container"
   [[ -f "$APP/embedded.mobileprovision" ]] || die "$(basename "$APP") has no embedded.mobileprovision"
+  # Ticket 18: the Share and Safari extensions. Same team and the app group (the capture inbox); no iCloud and no
+  # keychain group, since they make no network calls and never tag.
+  appexes=("$APP"/PlugIns/*.appex)
+  [[ -e "${appexes[0]}" ]] || die "$(basename "$APP") embeds no extensions (expected the Share and Safari extensions)"
+  for bundle in "${appexes[@]}"; do
+    ents=$(codesign -d --entitlements - --xml "$bundle" 2>/dev/null | plutil -convert json -o - - )
+    team=$(codesign -dvv "$bundle" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+    groups=$(printf '%s' "$ents" | plutil -extract com\\.apple\\.security\\.application-groups json -o - - 2>/dev/null)
+    printf '    %-32s team=%s groups=%s\n' "$(basename "$bundle")" "$team" "$groups"
+    [[ "$team" == "$TEAM" ]] || die "$(basename "$bundle") is signed by team '$team', expected $TEAM"
+    [[ "$groups" == *'group.com.tejaskale.deepwell'* ]] || die "$(basename "$bundle") lacks the app group group.com.tejaskale.deepwell"
+    [[ -f "$bundle/embedded.mobileprovision" ]] || die "$(basename "$bundle") has no embedded.mobileprovision"
+  done
   rm -rf "$CHECK"
 else
 PKG=$(ls "$EXPORT"/*.pkg 2>/dev/null | head -1)

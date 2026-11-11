@@ -7,7 +7,7 @@ import DeepwellTranscription
 
 // Fixtures are hand-written in the shape of the real iTunes Lookup API, Podcasting 2.0 RSS and Overcast pages;
 // they were not recorded from the live services.
-private struct StubHTTP: HTTPClient {
+struct StubHTTP: HTTPClient {
     var routes: [String: String]
     func get(_ url: URL) async throws -> Data {
         guard let body = routes.first(where: { url.absoluteString.hasPrefix($0.key) })?.value else { throw PodcastError.http(404) }
@@ -15,7 +15,7 @@ private struct StubHTTP: HTTPClient {
     }
 }
 
-private enum Fixture {
+enum Fixture {
     static let lookup = """
     {"resultCount":1,"results":[{"wrapperType":"podcastEpisode","kind":"podcast-episode","trackName":"The Deep Dive: Sleep",
      "collectionName":"Slow Science","artistName":"Slow Science Co","episodeGuid":"guid-42",

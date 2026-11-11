@@ -56,7 +56,7 @@ let package = Package(
         .target(name: "DeepwellCuration", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellIndex", "DeepwellTagging"]),
         .testTarget(name: "DeepwellCurationTests", dependencies: ["DeepwellCuration", "DeepwellIndex", "DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
         .target(name: "DeepwellPodcasts", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellCapture", "DeepwellYouTube", "DeepwellTranscription"]),
-        .testTarget(name: "DeepwellPodcastsTests", dependencies: ["DeepwellPodcasts", "DeepwellCapture", "DeepwellLibrary", "DeepwellModel", "DeepwellTranscription"]),
+        .testTarget(name: "DeepwellPodcastsTests", dependencies: ["DeepwellPodcasts", "DeepwellCapture", "DeepwellLibrary", "DeepwellModel", "DeepwellTranscription", "DeepwellTagging"]),
         .target(name: "DeepwellMagazines", dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellTagging"]),
         .testTarget(name: "DeepwellMagazinesTests", dependencies: ["DeepwellMagazines", "DeepwellTagging", "DeepwellLibrary", "DeepwellModel"]),
         .target(name: "DeepwellKindle", dependencies: ["DeepwellModel", "DeepwellTagging"]),

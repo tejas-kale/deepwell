@@ -32,9 +32,24 @@ public struct CapturePayload: Codable, Equatable, Sendable {
     public enum Invalid: Error, Equatable { case emptyBody, badURL, unsupportedType(String) }
 
     /// A bare link from the Share Extension: no content yet; the app resolves it (podcast, YouTube) later.
+    /// `title` is whatever the share sheet knew (the page title when extraction failed on iOS); it may be empty.
     public static let linkType = "link"
-    public static func link(_ url: URL) -> CapturePayload { CapturePayload(url: url.absoluteString, title: "", markdown: "", type: linkType) }
+    public static func link(_ url: URL, title: String? = nil) -> CapturePayload {
+        CapturePayload(url: url.absoluteString, title: title ?? "", markdown: "", type: linkType)
+    }
     public var isLink: Bool { type == CapturePayload.linkType }
+
+    public static let linkOnlyBody =
+        "_Only the link was saved: Deepwell couldn't read this page when it was shared. Open the original to read it._"
+
+    /// iOS fallback for a link that is neither a podcast nor a YouTube video (shared from an app other than Safari,
+    /// or extraction failed in the share sheet): an `article` with the title the share sheet had and a pointer to the
+    /// original. The Mac parks such links instead (docs/podcasts.md).
+    public func linkOnlyDocument(id: String = UUID().uuidString.lowercased(), now: Date = Date()) -> ItemDocument {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let item = Item(id: id, type: .article, title: trimmed.isEmpty ? url : trimmed, sourceURL: URL(string: url), capturedAt: now)
+        return ItemDocument(item: item, body: Self.linkOnlyBody + "\n\n<\(url)>")
+    }
 
     public func validated() throws -> CapturePayload {
         if isLink {

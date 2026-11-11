@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key><string>en</string>
+	<key>CFBundleDisplayName</key><string>Deepwell</string>
+	<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+	<key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key><string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key><false/>
+	<!-- Ticket 18: the iOS app group; the app ingests this group's Inbox (docs/ios.md, Capture). -->
+	<key>DeepwellAppGroup</key><string>group.com.tejaskale.deepwell</string>
+	<!-- Same native handler and Resources as the Mac extension (Extensions/SafariExtension). -->
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key><string>com.apple.Safari.web-extension</string>
+		<key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).SafariWebExtensionHandler</string>
+	</dict>
+</dict>
+</plist>

@@ -40,6 +40,10 @@ The release script's App Store Connect key (`deepwell.asc-api-key`) is not an ap
 - **Mac reads through `SyncedKeyWithLocalFallback`:** synced item, else the old device-local one, so a key whose
   migration failed still works. Saving writes the synced item and then drops the old one; Remove deletes both.
 - **iOS** reads and writes the synced items directly (it never had device-local ones).
+- **Mac Settings > AI** (one tab since ticket 18, replacing the Anthropic and OpenRouter tabs): the Anthropic key
+  (masked hint, Replace…/Remove… with a confirmation) and the OpenRouter key ("Stored in Keychain", Replace/Remove),
+  each with its iCloud Keychain footer. Storage, `MacKeys` and the migration are unchanged. Kindle's cover-art note
+  points at Settings > AI.
 - Key status is re-read when Settings opens, on each Mac tagging pass and when the phone app becomes active, because
   iCloud Keychain delivers a key from the other device in the background.
 
@@ -50,8 +54,9 @@ Code: `DeepwellTagging/CaptureLedger.swift` (`CaptureLedger`, `PhoneTaggingRun`)
 
 - The phone runs the same `TaggingService` and `AnthropicTaggingModel`, with the model from its Settings (Haiku 5.5 by
   default). It only tags **what this device captured**: file names in `CaptureLedger` (UserDefaults in the iOS app
-  group, key `tagging.capturedHere`). Ticket 18's ingestion calls `PhoneTagger.recordCapture(fileName:)` after it
-  writes an item file. Nothing records yet, so **the capture → tag path is not reachable until ticket 18**.
+  group, key `tagging.capturedHere`). Fed by capture since ticket 18: `MobileAppModel.ingestCaptures()` runs
+  `InboxIngestor`, which calls `PhoneTagger.recordCapture(fileName:)` once for every item file it writes from the
+  share sheet or the Safari extension, and only for those (`InboxIngestorTests`; docs/ios.md, Capture).
 - **Scope:** `TaggingScope.capturedHere(names)`: only those files, and only while `tags` is empty. Unlike the Mac
   (`.wholeLibrary`), the phone never re-tags an item that has tags but no summary. The vocabulary sent to the model is
   the same as the Mac's (tags of summarised items across the library).
@@ -73,8 +78,9 @@ protection keychain, plus each migration path and that SMTP and other items are 
 checks the skip rule, ledger settling, and a racing tag from the other device. Both signed builds (Mac and iOS 6)
 carry `keychain-access-groups` = `NDMG62GXZA.com.tejaskale.deepwell` and processed VALID.
 Confirmed by the user on 2026-11-11: the installed Mac build 6 migrated both keys (still set), and the iPhone shows
-both keys from the Mac. Not verified: a replaced key crossing devices (both ways), the SMTP password afterwards, and
-the BGProcessingTask on a device. Phone tagging end to end waits for ticket 18.
+both keys from the Mac. Later the same day the user confirmed a replaced key crossing devices in both directions
+(Mac → phone and phone → Mac). Not verified: the SMTP password afterwards, the BGProcessingTask on a device, and
+phone tagging end to end after a phone capture (reachable since ticket 18; not yet tried on a device).
 
 ## Summary (persisted)
 
