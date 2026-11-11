@@ -72,9 +72,8 @@ change, or just re-run the script). Expiry does not touch your library: it lives
   build, the TestFlight build and `install.sh` builds all share it. On first launch, the TestFlight build drains
   any pending captures into the library, as every launch does. If no library folder is chosen yet, they stay queued.
 - **Settings, library bookmark, Keychain keys:** keyed by the bundle id `com.tejaskale.deepwell`, which is
-  unchanged. Not yet verified: whether macOS hands the App Store-signed build the sandbox container written by the
-  development-signed build. If Deepwell opens asking for a library folder, pick `iCloud Drive/Deepwell` again. If it
-  asks for API keys, re-enter them.
+  unchanged. Verified 2026-11-11: the TestFlight build kept the settings, library bookmark and keys written by the
+  development-signed build.
 - Before the first TestFlight install: open the current Deepwell once so pending captures drain, then quit it and
   move the locally built `/Applications/Deepwell.app` to the Trash. TestFlight does not overwrite a differently signed
   copy. It installs next to it as `Deepwell 2.app`, and the scripts treat `/Applications/Deepwell.app` as the

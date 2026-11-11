@@ -29,21 +29,16 @@ of topic bundles so you can go deep on one topic per week.
   because macOS extensions otherwise ship without a profile, which TestFlight rejects (ITMS-90889).
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
   extensions not signed with a paid account. Ticket 12 moves signing to the paid account to settle this.
-- **PARTLY VERIFIED (2026-11-11).** Build 0.1.0 (2) passed App Store Connect validation and was uploaded
-  (delivery 75f2d33f-21fa-494c-ba7b-a073aac00b98). It installed from the TestFlight app (signed "TestFlight Beta
-  Distribution", team NDMG62GXZA), and Safari lists exactly one Deepwell extension (confirmed by the user).
-  The first install landed next to the old development build as `Deepwell 2.app`. Once the old copy was trashed and
-  the new one renamed to `Deepwell.app`, pluginkit showed both extensions provided by `/Applications/Deepwell.app`.
-  Still not confirmed: steps 3–5 below (saving, then still enabled after a Safari restart with "Allow Unsigned
-  Extensions" off) and whether settings, the library bookmark and keys carried over. To settle the rest:
-  1. Install Deepwell from the TestFlight app. Developer > "Allow Unsigned Extensions" must stay **off**.
-  2. Safari > Settings > Extensions: check that exactly **one** Deepwell is listed. Enable it and allow it on all websites.
-     If two are listed, run `scripts/unregister-stale-builds.sh` and restart Safari.
-  3. Open an article, click the Deepwell toolbar button, then press Ctrl+Shift+S on another. Expect a toast and a
-     new .md file in the library folder (check frontmatter and body). Repeat on a page behind a login.
-  4. Quit Safari (Cmd+Q) and reopen. Record whether the extension is still enabled and saving still works.
-  5. Record the outcome here. Also record whether the keyboard shortcut fires (`_execute_action` ->
-     `action.onClicked` in Safari is assumed, not confirmed).
+- **RESOLVED (2026-11-11), confirmed by the user on the TestFlight build.** Build 0.1.0 (2) passed App Store
+  Connect validation, uploaded (delivery 75f2d33f-21fa-494c-ba7b-a073aac00b98) and installed from the TestFlight app
+  (signed "TestFlight Beta Distribution", team NDMG62GXZA). With "Allow Unsigned Extensions" off:
+  - Safari lists exactly one Deepwell extension;
+  - saving works from the toolbar button and from Ctrl+Shift+S, so `_execute_action` -> `action.onClicked` fires;
+  - after quitting Safari (Cmd+Q) and reopening it, the extension is still enabled and saving still works.
+  Settings, the library bookmark and the API keys carried over from the development-signed build.
+  The first install landed next to the old development build as `Deepwell 2.app`. Fixed by trashing the old copy,
+  renaming the new one and running `scripts/unregister-stale-builds.sh` (now in docs/install.md).
+  Not tested in this pass: saving a page behind a login.
 
 ## Capture
 
@@ -140,7 +135,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 
 | Ticket | Status | Notes |
 |---|---|---|
-| 01 Safari extension saves tab | Built, partly unverified | Unsigned-extension behaviour, toolbar button/shortcut, login pages and the folder picker UI still need a manual test (see Platform → Risk). Ticket left in-progress. |
+| 01 Safari extension saves tab | Built, mostly verified | Toolbar button, Ctrl+Shift+S and surviving Safari restarts confirmed on the TestFlight build (2026-11-11, see Platform → Risk). Login pages still untested. |
 | 02 Library and reader | Built | Docs in `docs/safari-extension.md`. Real iCloud eviction untested. |
 | 03 Auto-tag on capture | Built | `docs/tagging.md`. Model id `claude-haiku-5-5` untested against the API. |
 | 04 Tag curation and filters | Built | `docs/tag-curation.md`. Also wires the YouTube view into the reader. |
@@ -150,7 +145,7 @@ run, nothing has run in Safari, and no real Anthropic API call has been made** �
 | 08 Magazine import | Built, UI unverified | `docs/magazines.md`. Fixtures generated at test time, not real magazines; splitting prompt never run against the real API; drop, Dock, Share Extension and the reader jump never run. Shares one Share Extension target with 07 (merged by hand; combined activation rule untested). |
 | 09 Weekly menu on demand | Built | `docs/menu.md`. Queue progress refreshes only on open/pick; opening an item from the queue is not wired. |
 | 10 Monday schedule | Removed | Replaced by on-demand building; scheduler, notification and their tests deleted. |
-| 12 Paid account and TestFlight | Built, partly unverified | `docs/install.md`, `scripts/release.sh`. Build 0.1.0 (2) validated and uploaded to TestFlight (2026-11-11). The TestFlight install and Safari restart test are not done (see Platform → Risk). |
+| 12 Paid account and TestFlight | Done | `docs/install.md`, `scripts/release.sh`. Build 0.1.0 (2) validated, uploaded and installed from TestFlight (2026-11-11). One Safari extension, still enabled after a restart without "Allow Unsigned Extensions"; settings and keys carried over (see Platform → Risk). |
 
 Next steps: run the app and Safari manual tests; try the real API calls; wire
 `TranscriptionStatusView` into the library list.
