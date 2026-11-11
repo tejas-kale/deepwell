@@ -75,7 +75,11 @@ change, or just re-run the script). Expiry does not touch your library: it lives
   unchanged. Not yet verified: whether macOS hands the App Store-signed build the sandbox container written by the
   development-signed build. If Deepwell opens asking for a library folder, pick `iCloud Drive/Deepwell` again. If it
   asks for API keys, re-enter them.
-- Before the first TestFlight install: open the current Deepwell once so pending captures drain, then quit it.
+- Before the first TestFlight install: open the current Deepwell once so pending captures drain, then quit it and
+  move the locally built `/Applications/Deepwell.app` to the Trash. TestFlight does not overwrite a differently signed
+  copy. It installs next to it as `Deepwell 2.app`, and the scripts treat `/Applications/Deepwell.app` as the
+  installed one. If that already happened: quit both, trash the old copy, rename `Deepwell 2.app` to `Deepwell.app`
+  (TestFlight finds it by bundle id), then run `scripts/unregister-stale-builds.sh`.
 
 ## Fallback: local build without TestFlight
 

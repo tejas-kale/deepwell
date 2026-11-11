@@ -29,10 +29,13 @@ of topic bundles so you can go deep on one topic per week.
   because macOS extensions otherwise ship without a profile, which TestFlight rejects (ITMS-90889).
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
   extensions not signed with a paid account. Ticket 12 moves signing to the paid account to settle this.
-- **UNVERIFIED (2026-11-11), needs a manual test of the TestFlight build.** Build 0.1.0 (2) passed App Store
-  Connect validation and was uploaded (delivery 75f2d33f-21fa-494c-ba7b-a073aac00b98). The export is signed with Apple
-  Distribution (team NDMG62GXZA), and the app and both extensions carry Mac Team Store profiles. Nobody has yet
-  installed it from TestFlight or run it in Safari. No result is claimed. To settle the risk:
+- **PARTLY VERIFIED (2026-11-11).** Build 0.1.0 (2) passed App Store Connect validation and was uploaded
+  (delivery 75f2d33f-21fa-494c-ba7b-a073aac00b98). It installed from the TestFlight app (signed "TestFlight Beta
+  Distribution", team NDMG62GXZA), and Safari lists exactly one Deepwell extension (confirmed by the user).
+  The first install landed next to the old development build as `Deepwell 2.app`. Once the old copy was trashed and
+  the new one renamed to `Deepwell.app`, pluginkit showed both extensions provided by `/Applications/Deepwell.app`.
+  Still not confirmed: steps 3–5 below (saving, then still enabled after a Safari restart with "Allow Unsigned
+  Extensions" off) and whether settings, the library bookmark and keys carried over. To settle the rest:
   1. Install Deepwell from the TestFlight app. Developer > "Allow Unsigned Extensions" must stay **off**.
   2. Safari > Settings > Extensions: check that exactly **one** Deepwell is listed. Enable it and allow it on all websites.
      If two are listed, run `scripts/unregister-stale-builds.sh` and restart Safari.
