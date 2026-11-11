@@ -1,6 +1,6 @@
 # Deepwell — spec
 
-Deepwell is a native Mac app (later iPhone/iPad) that captures things to read or watch — articles, YouTube
+Deepwell is a native Mac app with an iPhone/iPad companion that captures things to read or watch — articles, YouTube
 videos, podcast episodes and magazine issues — tags them by topic with an LLM, and on request builds a menu
 of topic bundles so you can go deep on one topic per week.
 
@@ -12,7 +12,6 @@ of topic bundles so you can go deep on one topic per week.
 
 ## Non-goals (v1)
 
-- iPhone/iPad app (the code is SwiftUI multiplatform so it can follow).
 - Highlights and notes.
 - Books.
 - Porting or calling the `clip` CLI.
@@ -22,6 +21,7 @@ of topic bundles so you can go deep on one topic per week.
 
 - SwiftUI app for macOS. Targets: the app, a Safari Web Extension and a Share Extension.
 - Built with a free Apple ID (personal team), locally signed. No paid developer account yet.
+  *Superseded by ticket 12: moving to a paid account and TestFlight (see iPhone/iPad companion below).*
 - **Risk:** Safari may require "Allow Unsigned Extensions" (Develop menu) after each Safari restart for
   extensions not signed with a paid account. Ticket 1 tests this before anything else gets built.
 - **UNVERIFIED — needs manual test.** Ticket 01 is built but nobody has run it in Safari (the build was done
@@ -90,10 +90,39 @@ of topic bundles so you can go deep on one topic per week.
 - Tracks status and progress, so finished items drop out of future menus.
 - Library view: filter by tag, type and status, plus full-text search over the index.
 
+## iPhone/iPad companion (decided 2026-11-11, tickets 12–20)
+
+A companion app, not a port: read, listen and work the week's Current Focus on the go, and capture from the phone.
+Heavy jobs stay on the Mac.
+
+- **Platform:** one iOS target for iPhone and iPad, iOS 26 minimum. iPad uses a NavigationSplitView close to the Mac layout.
+- **Signing and distribution:** paid Apple Developer account. Every device, Mac included, installs builds from
+  TestFlight through one archive-and-upload script. That replaces `scripts/install.sh`'s copy into /Applications.
+- **Library:** moves from the user-picked `iCloud Drive/Deepwell` folder into the app's own iCloud container
+  (public, so Finder still shows it as `iCloud Drive/Deepwell`). The Mac's folder picker goes away. Both apps
+  use `NSMetadataQuery` for changes and download state. If iCloud is signed out, both use a local fallback folder.
+- **Shared state in the library:** `<library>/.deepwell/` holds `menu.json` (menu, pick and pick history, moved out of
+  Application Support) and `tag-ops.jsonl` (the curation log). The Mac is the only writer of `menu.json`, and the
+  phone reads it. The SQLite index stays per device and is rebuilt from the Markdown files.
+- **Conflicts:** every write to an item file is file-coordinated. When iCloud reports conflict versions, they are merged
+  automatically: the body is kept, the most advanced status wins (done > reading > unread), the highest progress wins,
+  and tags are combined. The losing versions are deleted. Combining tags is only safe because tag renames, merges and
+  deletes are appended to `tag-ops.jsonl` and re-applied to any file's tags. That way a stale copy can't bring a removed tag back.
+- **Keys:** Anthropic and OpenRouter keys are synchronizable Keychain items in a shared access group, entered once.
+- **Phone does:** reading, status/progress, Current Focus, the library with filters and search, tag curation,
+  Listen (generates narration and plays it in the background with lock-screen controls), and tagging at capture.
+  Capture uses a Share Extension that runs extraction in the page and an iOS Safari Web Extension.
+  Magazine PDFs and EPUBs shared from the phone go to `issues/`.
+- **Phone does not:** build or pick menus, transcribe (items are saved with `needs_transcript: true` for the Mac),
+  split magazines, or send to Kindle.
+- **Offline:** whenever `menu.json` changes, the queue's `.md` files and `.narration/` folders are downloaded.
+  Everything else downloads when opened.
+- **Code:** new `Apps/DeepwellMobile` target. Platform-neutral SwiftUI (Markdown rendering, reader core, theme,
+  tags) moves into a `DeepwellUI` package module that both apps use. Mac-only code (PaneFocus, menus, Kindle) stays
+  in `Apps/Deepwell`.
+
 ## Later
 
-- iPhone/iPad app reading the same iCloud Drive folder.
-- Paid developer account: properly signed extensions and TestFlight.
 - Highlights and notes, fed into the weekly picks.
 
 ## Implementation status (as of 2026-11-08)
