@@ -11,12 +11,16 @@ final class MobileAppModel {
 
     private(set) var phase = Phase.opening
     private(set) var library: FocusLibrary?
+    let settings = MobileSettings()
+    let tagger: PhoneTagger
 
     @ObservationIgnored private let store = LibraryFolderStore()
     @ObservationIgnored private var identityObserver: NSObjectProtocol?
     @ObservationIgnored private var opening: Task<Void, Never>?
 
     init() {
+        let group = Bundle.main.object(forInfoDictionaryKey: "DeepwellAppGroup") as? String
+        tagger = PhoneTagger(store: store, settings: settings, defaults: group.flatMap(UserDefaults.init(suiteName:)) ?? .standard)
         identityObserver = NotificationCenter.default.addObserver(forName: .NSUbiquityIdentityDidChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.open() }
         }
@@ -38,7 +42,7 @@ final class MobileAppModel {
             }
             if library?.location != location {
                 library?.stop()
-                library = FocusLibrary(location: location)
+                library = FocusLibrary(location: location, onSynced: { [weak self] in self?.tagger.kick() })
             }
             phase = .ready
         }
@@ -47,5 +51,10 @@ final class MobileAppModel {
     /// Back in the foreground: iCloud may have been signed in or out meanwhile, and files may have changed.
     func becameActive() {
         if phase == .ready, let library { library.refresh() } else { open() }
+        settings.reloadKeys()   // a key entered on the Mac may have arrived through iCloud Keychain
+        tagger.kick()
     }
+
+    /// Backgrounded: anything this device captured and hasn't tagged yet gets a BGProcessingTask.
+    func enteredBackground() { tagger.scheduleBackgroundTagging() }
 }

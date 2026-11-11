@@ -38,6 +38,7 @@ final class AppModel {
     let kindle = KindleController()
 
     init() {
+        MacKeys.migrate()   // ticket 16: before any controller reads a key
         tagging = TaggingController(library: folderStore)
         transcription = TranscriptionController(folderStore: folderStore)
         let tagging = self.tagging

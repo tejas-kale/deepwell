@@ -152,7 +152,7 @@ private struct AnthropicSettingsView: View {
             } header: {
                 Text("Anthropic")
             } footer: {
-                Text("Used for tagging, magazine splitting and the weekly menu. Stored only in your Keychain.")
+                Text("Used for tagging, magazine splitting and the weekly menu. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -160,6 +160,7 @@ private struct AnthropicSettingsView: View {
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
         .ayuTheme()
+        .onAppear { tagging.refreshKey() }
         .confirmationDialog("Remove the stored API key?", isPresented: $confirmRemove) {
             Button("Remove Key", role: .destructive) {
                 do { try tagging.removeKey(); error = nil } catch { self.error = "Keychain error: \(error.localizedDescription)" }
@@ -302,13 +303,14 @@ private struct OpenRouterSettingsView: View {
             } header: {
                 Text("OpenRouter")
             } footer: {
-                Text("Used for Listen (text to speech) and Kindle cover art. Stored only in your Keychain.")
+                Text("Used for Listen (text to speech) and Kindle cover art. Stored in iCloud Keychain, so your iPhone and iPad have it too.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear { account.reload() }
     }
 }
 

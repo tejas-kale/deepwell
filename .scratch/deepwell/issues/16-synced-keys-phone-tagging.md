@@ -4,11 +4,18 @@
 
 **Blocked by:** 15
 
-**Status:** ready-for-agent
+**Status:** done (branch `ticket-16-synced-keys`), with these unverified on devices: the Mac's key migration on the TestFlight install, a key entered on one device appearing on the other, and phone tagging end to end (needs ticket 18's capture to record items)
 
-- [ ] `APIKeyStore` keychain implementation uses `kSecAttrSynchronizable = true` and a shared keychain access group (both apps, both platforms). On first launch the Mac re-saves existing device-local keys as synchronizable, then deletes the old items
-- [ ] SMTP password (Kindle) stays device-local and Mac-only
-- [ ] iOS Settings: key status (set / not set, never shown in full), replace/remove, tagging model, and the Listen model and voice (ticket 17 uses these). Settings shared between devices that aren't secret (models, voice) stay per device in UserDefaults for now
-- [ ] Phone tags an item right after it lands from capture (ticket 18) with the main app in the foreground, using a `BGProcessingTask` if the app is backgrounded. Tagging never runs inside an extension
-- [ ] No double tagging: an item that already has tags is skipped by both devices, and if both tag at once the conflict merge combines the tags
-- [ ] Tests: synchronizable attributes in the keychain query (stubbed `SecItem` seam); migration from local to synced keys
+- [x] `APIKeyStore` keychain implementation uses `kSecAttrSynchronizable = true` and a shared keychain access group (both apps, both platforms). On first launch the Mac re-saves existing device-local keys as synchronizable, then deletes the old items
+- [x] SMTP password (Kindle) stays device-local and Mac-only
+- [x] iOS Settings: key status (set / not set, never shown in full), replace/remove, tagging model, and the Listen model and voice (ticket 17 uses these). Settings shared between devices that aren't secret (models, voice) stay per device in UserDefaults for now
+- [ ] (built behind `PhoneTagger.recordCapture`, end-to-end waits for ticket 18) Phone tags an item right after it lands from capture (ticket 18) with the main app in the foreground, using a `BGProcessingTask` if the app is backgrounded. Tagging never runs inside an extension
+- [x] No double tagging: an item that already has tags is skipped by both devices, and if both tag at once the conflict merge combines the tags
+- [x] Tests: synchronizable attributes in the keychain query (stubbed `SecItem` seam); migration from local to synced keys
+
+## Result (2026-11-11)
+
+- Built: the SecItem seam, synced store, Mac migration with fallback, entitlements, iOS Settings, `TaggingScope`,
+  `CaptureLedger`, `PhoneTagger` with a BGProcessingTask. Tests: `KeychainStoreTests` (13), `PhoneTaggingTests` (6).
+- Uploaded Mac 0.1.0 (6) and iOS 0.1.0 (6); both processed VALID. The signed builds carry `keychain-access-groups`.
+- The capture → tag trigger is unreachable until ticket 18 calls `PhoneTagger.recordCapture(fileName:)`.

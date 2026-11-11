@@ -29,7 +29,10 @@ struct MobileRootView: View {
             }
         }
         .ayuTheme()
-        .onChange(of: scenePhase) { if scenePhase == .active { app.becameActive() } }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active { app.becameActive() }
+            if scenePhase == .background { app.enteredBackground() }
+        }
         .overlay(alignment: .bottom) {
             if let msg = app.library?.errorMessage {
                 Text(msg).font(.caption).padding(8).background(.thinMaterial, in: Capsule()).padding()
@@ -49,6 +52,9 @@ private struct PhoneRoot: View {
             }
             Tab(MobileSection.reading.title, systemImage: MobileSection.reading.symbol, value: .reading) {
                 NavigationStack { ReadingList(library: library).readerDestination(library) }
+            }
+            Tab(MobileSection.settings.title, systemImage: MobileSection.settings.symbol, value: .settings) {
+                NavigationStack { SettingsScreen() }
             }
         }
     }
@@ -70,9 +76,12 @@ private struct PadRoot: View {
             switch section ?? .focus {
             case .focus: FocusQueueList(library: library, selection: $itemID)
             case .reading: ReadingList(library: library, selection: $itemID)
+            case .settings: SettingsScreen()
             }
         } detail: {
-            if let itemID, let entry = library.entry(id: itemID) {
+            if section == .settings {
+                ContentUnavailableView("Settings", systemImage: "gearshape", description: Text("Keys sync with your Mac through iCloud Keychain."))
+            } else if let itemID, let entry = library.entry(id: itemID) {
                 reader(library, entry).id(itemID)
             } else {
                 ContentUnavailableView("Pick something to read", systemImage: "text.book.closed")

@@ -15,7 +15,7 @@ final class KindleController {
     private static let sentKey = "kindle.sentFocus"
 
     var settings: KindleSettings { didSet { saveSettings() } }
-    let smtpPassword: APIKeyStore = KeychainAPIKeyStore(service: "com.tejaskale.deepwell.smtp", account: "password")
+    let smtpPassword: APIKeyStore = DeepwellKeys.smtpPassword()   // device-local, never synced (ticket 16)
     private(set) var hasPassword: Bool
 
     private(set) var isSending = false

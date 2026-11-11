@@ -13,7 +13,7 @@ settings:
     SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "5"
+    CURRENT_PROJECT_VERSION: "6"
     ENABLE_HARDENED_RUNTIME: YES
     # macOS app extensions default to NO; TestFlight rejects any bundle without embedded.provisionprofile
     # (ITMS-90889), so make automatic signing provision the app and both extensions.
@@ -85,6 +85,10 @@ targets:
           - CloudDocuments
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)dev.deepwell
+        # Ticket 16: the Anthropic and OpenRouter keys are iCloud Keychain items in this group, which the iOS app
+        # carries too (same bundle id, same team). DeepwellKeychainGroup in Info.plist tells the code its name.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.tejaskale.deepwell
   # iPhone/iPad companion (ticket 15, docs/ios.md). Same bundle id as the Mac app (one App Store Connect app, universal
   # purchase) and the same iCloud container; its own app group (spec Platform). Reads menu.json, never writes it.
   DeepwellMobile:
@@ -102,7 +106,12 @@ targets:
       - package: DeepwellCore
         product: DeepwellMenu
       - package: DeepwellCore
+        product: DeepwellTagging
+      - package: DeepwellCore
+        product: DeepwellNarration
+      - package: DeepwellCore
         product: DeepwellUI
+      - sdk: BackgroundTasks.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell
@@ -126,6 +135,8 @@ targets:
           - CloudDocuments
         com.apple.security.application-groups:
           - group.com.tejaskale.deepwell
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.tejaskale.deepwell
   DeepwellSafariExtension:
     type: app-extension
     platform: macOS

@@ -5,9 +5,13 @@ import AVFoundation
 /// It reads `.deepwell/menu.json` and never writes it; item status and progress go through `ItemFileUpdater`.
 @main
 struct DeepwellMobileApp: App {
-    @State private var model = MobileAppModel()
+    @State private var model: MobileAppModel
 
     init() {
+        let model = MobileAppModel()
+        _model = State(initialValue: model)
+        // BGTaskScheduler wants every handler registered before launch finishes (ticket 16, phone tagging).
+        model.tagger.registerBackgroundTask()
         // Podcast audio plays with the ring/silent switch on silent, like any audio app.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
     }

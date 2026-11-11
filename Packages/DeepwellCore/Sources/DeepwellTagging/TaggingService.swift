@@ -8,6 +8,24 @@ public protocol LibraryAccessing: Sendable {
 }
 extension LibraryFolderStore: LibraryAccessing {}
 
+/// Which items a pass may tag. The Mac tags the whole library; the phone only what it captured itself (ticket 16).
+public struct TaggingScope: Sendable, Equatable {
+    /// Item file names (e.g. `2026-11-11-title.md`) the pass is limited to; nil means every file.
+    public let fileNames: Set<String>?
+    /// Also re-tag items that have tags but no summary (tagged before summaries existed). Mac only: the phone
+    /// skips any item that already has tags, so the two devices never both tag one item.
+    public let retagMissingSummary: Bool
+
+    public static let wholeLibrary = TaggingScope(fileNames: nil, retagMissingSummary: true)
+    /// The phone: only these files, and only while they have no tags.
+    public static func capturedHere(_ fileNames: Set<String>) -> TaggingScope {
+        TaggingScope(fileNames: fileNames, retagMissingSummary: false)
+    }
+
+    public func includes(_ fileName: String) -> Bool { fileNames?.contains(fileName) ?? true }
+    public func needsTagging(_ item: Item) -> Bool { item.tags.isEmpty || (retagMissingSummary && item.summary == nil) }
+}
+
 /// Tags (and summarises) items in the background. The retry queue is derived from the library itself:
 /// any item file with no tags or no summary is pending, so nothing needs persisting and a relaunch resumes.
 /// Failures leave the file untouched and back off per file (in memory).
@@ -21,6 +39,9 @@ public actor TaggingService {
         /// Set when the pass stopped early on a rate limit / overload / network error: nothing more is tried
         /// until this time. Untried items keep no penalty.
         public var pausedUntil: Date?
+        /// Limited scopes only: file names in the scope that need nothing more (tagged now, already had tags, or
+        /// gone from the library), so the caller can drop them from its queue.
+        public var settled: [String] = []
     }
 
     private let library: LibraryAccessing
@@ -49,7 +70,7 @@ public actor TaggingService {
 
     /// One pass over the library. Never throws: errors are counted and retried on a later pass.
     @discardableResult
-    public func processPending() async -> RunSummary {
+    public func processPending(scope: TaggingScope = .wholeLibrary) async -> RunSummary {
         var summary = RunSummary()
         guard !running else { return summary }
         running = true; defer { running = false }
@@ -57,15 +78,18 @@ public actor TaggingService {
         guard now() >= pausedUntil else { summary.pausedUntil = pausedUntil; return summary }
 
         let scan: Scan
-        do { scan = try library.withAccess { Self.scan($0) } } catch { return summary }
+        do { scan = try library.withAccess { Self.scan($0, scope: scope) } } catch { return summary }
         var vocabulary = scan.vocabulary
+        summary.settled = scan.settled
 
         for c in scan.pending {
             if let a = attempts[c.item.id], a.next > now() { summary.skippedBackoff += 1; continue }
             do {
                 let result = try await tagger.tag(title: c.item.title, text: c.body, vocabulary: vocabulary, librarySize: scan.librarySize)
-                let written = try library.withAccess { _ in try Self.apply(result, to: c.url) }
+                let written = try library.withAccess { _ in try Self.apply(result, to: c.url, scope: scope) }
                 if written { summary.tagged.append(c.item.id) }
+                // Written, or tagged elsewhere meanwhile (apply re-reads the file): either way, done here.
+                if scope.fileNames != nil { summary.settled.append(c.url.lastPathComponent) }
                 attempts[c.item.id] = nil
                 pauseCount = 0
                 for t in result.tags {
@@ -123,6 +147,7 @@ public actor TaggingService {
         var pending: [Candidate] = []
         var vocabulary: [TagUsage] = []
         var librarySize = 0
+        var settled: [String] = []
     }
 
     /// Pending: no tags, or no summary (items tagged before summaries existed are re-tagged once, replacing
@@ -130,12 +155,21 @@ public actor TaggingService {
     /// steer the re-tagging.
     static func needsTagging(_ item: Item) -> Bool { item.tags.isEmpty || item.summary == nil }
 
-    static func scan(_ folder: URL) -> Scan {
+    static func scan(_ folder: URL, scope: TaggingScope = .wholeLibrary) -> Scan {
         var s = Scan(), indexByCanonical: [String: Int] = [:]
-        for url in markdownFiles(in: folder) {
+        let files = markdownFiles(in: folder)
+        if let names = scope.fileNames {
+            // A scoped file that is gone (deleted, renamed) will never need tagging here.
+            s.settled = Array(names.subtracting(files.map(\.lastPathComponent))).sorted()
+        }
+        for url in files {
             guard let text = try? String(contentsOf: url, encoding: .utf8), let doc = try? FrontmatterCodec.decode(text) else { continue }
             s.librarySize += 1
-            if needsTagging(doc.item) { s.pending.append(Candidate(url: url, item: doc.item, body: doc.body)); continue }
+            let inScope = scope.includes(url.lastPathComponent)
+            if inScope, scope.needsTagging(doc.item) { s.pending.append(Candidate(url: url, item: doc.item, body: doc.body)); continue }
+            if inScope, scope.fileNames != nil { s.settled.append(url.lastPathComponent) }
+            // Vocabulary: summarised items only, whatever the scope (an out-of-scope untagged item adds nothing).
+            if needsTagging(doc.item) { continue }
             for t in Set(doc.item.tags) {
                 let c = Tagger.canonical(t)
                 if let i = indexByCanonical[c] { s.vocabulary[i].count += 1 }
@@ -146,11 +180,12 @@ public actor TaggingService {
     }
 
     /// Re-reads the file (it may have changed during the API call) and writes only if it still needs tagging.
-    static func apply(_ result: TagResult, to url: URL) throws -> Bool {
+    static func apply(_ result: TagResult, to url: URL, scope: TaggingScope = .wholeLibrary) throws -> Bool {
         // Read and write under one coordinated write, so a sync landing mid-call is not overwritten blindly.
         let written = try CoordinatedFile.update(url) { text in
             var doc = try FrontmatterCodec.decode(text)
-            guard needsTagging(doc.item) else { return nil }
+            // The other device may have tagged it while the model ran: skip, so tags are never written twice.
+            guard scope.needsTagging(doc.item) else { return nil }
             doc.item.tags = result.tags
             doc.item.summary = result.summary
             NewTagFlag.write(result.newTags, to: &doc.item)

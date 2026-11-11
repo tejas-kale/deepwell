@@ -2,11 +2,78 @@
 
 Code: `Packages/DeepwellCore/Sources/DeepwellTagging`. App glue: `Apps/Deepwell/TaggingController.swift`, `SettingsView.swift`.
 
-- `APIKeyStore` protocol; `KeychainAPIKeyStore` (generic password, service `com.tejaskale.deepwell.anthropic`). Key is only in the Keychain.
+- `APIKeyStore` protocol; `KeychainAPIKeyStore` (generic password, service `com.tejaskale.deepwell.anthropic`). Since ticket 16 it is an iCloud Keychain item shared with the iOS app: see "Keys" below.
 - `TaggingModel` protocol; `AnthropicTaggingModel` posts to the Messages API (`claude-haiku-5-5`) through an `HTTPTransport` seam. The prompt carries the existing vocabulary **with item counts** and the library size, and asks for `{"summary": "...", "tags": [...]}`: one broad field tag plus 1-3 specific subjects (2-4 total), main subjects only, reuse only when an existing tag truly fits, and no specific tags that already cover most of the library. (The old prompt "strongly preferred" existing tags, so the first tag snowballed onto every item and the menu builder had nothing to group by.)
 - `Tagger` normalises (lowercase, hyphenated), maps onto existing vocabulary spellings, dedupes, caps at 4, reports which tags are new, and passes the summary through.
 - `TaggingService.processPending()` scans the library for item files with empty `tags` **or no `summary`**, tags and summarises them, and rewrites the file (re-reading it first; skips if it was done meanwhile). Vocabulary = tags of already-summarised items, so items tagged by the old prompt are re-tagged once without their old tags steering the result.
 - **Retry:** the queue is derived from the library (untagged or unsummarised file = pending), so nothing extra is persisted. Any failure leaves the file untouched. Item-specific failures (unreadable reply, no tags, other 4xx) back off per item (30 s doubling, max 1 h, in memory). Rate limit (429), overload (529), 5xx or network errors stop the pass and pause the whole service (60 s doubling, max 15 min); untried items keep no penalty. Per-item backoff for those can make a large backlog retry in lockstep bursts that hit the limit every time. (Not the cause of the 42 unsummarised items; that was the token budget, below.) The app runs a pass 3 s after captures are saved and every 60 s.
+
+## Keys (ticket 16)
+
+Code: `DeepwellTagging/APIKeyStore.swift`. Tests: `KeychainStoreTests` (a fake keychain behind the seam).
+
+| Key | Service / account | Where | Used by |
+|---|---|---|---|
+| Anthropic | `com.tejaskale.deepwell.anthropic` / `api-key` | iCloud Keychain (synced) | tagging (both apps), magazine splitting, the weekly menu |
+| OpenRouter | `com.tejaskale.deepwell.openrouter` / `api-key` | iCloud Keychain (synced) | Listen (both apps, ticket 17 on iOS), Kindle cover art |
+| SMTP password | `com.tejaskale.deepwell.smtp` / `password` | login keychain, device-local | Kindle, Mac only |
+
+The release script's App Store Connect key (`deepwell.asc-api-key`) is not an app key; nothing in the apps reads it.
+
+- **Seam:** `SecItemAPI` wraps `SecItemCopyMatching/Add/Update/Delete`; `SystemSecItem` is the real one.
+- **`KeychainScope.synced(accessGroup:)`:** every query carries `kSecAttrSynchronizable = true`,
+  `kSecAttrAccessGroup` and `kSecUseDataProtectionKeychain = true` (synchronizable items exist only in the data
+  protection keychain on macOS; ignored on iOS). Adds use `kSecAttrAccessibleAfterFirstUnlock`, so the phone's
+  background task can read the key while the phone is locked.
+- **`.deviceLocal`:** exactly the pre-ticket-16 query (class, service, account). A query without the synchronizable
+  attribute matches only non-synchronizable items, so a device-local delete can't remove the synced copy.
+- **Access group:** `$(AppIdentifierPrefix)com.tejaskale.deepwell`, in both apps' `keychain-access-groups`
+  (project.yml) and in each Info.plist as `DeepwellKeychainGroup`, because the code can only learn the prefix from
+  there. `DeepwellKeys.sharedAccessGroup()` ignores an unexpanded value (an unsigned build). The query then uses the
+  default group, and on a build without entitlements the call fails with -34018.
+- **Mac migration** (`MacKeys.migrate()` in `AppModel.init`, before any controller reads a key;
+  `SyncedKeyMigration`): for Anthropic and OpenRouter only, read the old device-local item, save it as synced, read it
+  back, and only if it matches delete the old one. A synced copy with the same value (an interrupted run) means just
+  the delete. A *different* synced key (entered on the phone first) wins, and the old item is kept untouched. Any
+  failure keeps the old item. It runs at every launch and is idempotent: with no old item it is one read per key and
+  no writes. Outcomes are logged (subsystem `com.tejaskale.deepwell`, category `keys`).
+- **Mac reads through `SyncedKeyWithLocalFallback`:** synced item, else the old device-local one, so a key whose
+  migration failed still works. Saving writes the synced item and then drops the old one; Remove deletes both.
+- **iOS** reads and writes the synced items directly (it never had device-local ones).
+- Key status is re-read when Settings opens, on each Mac tagging pass and when the phone app becomes active, because
+  iCloud Keychain delivers a key from the other device in the background.
+
+## Tagging on the phone (ticket 16)
+
+Code: `DeepwellTagging/CaptureLedger.swift` (`CaptureLedger`, `PhoneTaggingRun`), `TaggingScope` in
+`TaggingService.swift`, app glue in `Apps/DeepwellMobile/PhoneTagger.swift`. Tests: `PhoneTaggingTests`.
+
+- The phone runs the same `TaggingService` and `AnthropicTaggingModel`, with the model from its Settings (Haiku 5.5 by
+  default). It only tags **what this device captured**: file names in `CaptureLedger` (UserDefaults in the iOS app
+  group, key `tagging.capturedHere`). Ticket 18's ingestion calls `PhoneTagger.recordCapture(fileName:)` after it
+  writes an item file. Nothing records yet, so **the capture → tag path is not reachable until ticket 18**.
+- **Scope:** `TaggingScope.capturedHere(names)`: only those files, and only while `tags` is empty. Unlike the Mac
+  (`.wholeLibrary`), the phone never re-tags an item that has tags but no summary. The vocabulary sent to the model is
+  the same as the Mac's (tags of summarised items across the library).
+- **No double tagging:** the Mac skips items with tags. The phone skips them too, and only tags its own captures.
+  `apply` re-reads the file under a coordinated write and skips if it got tags meanwhile, for example the Mac's tags
+  syncing in during the API call. If both write at once anyway, iCloud's conflict versions go through
+  `ConflictResolver`, which takes the union of the tags.
+- **Ledger:** after a pass, names that are tagged, already had tags, or whose file is gone are dropped. Failures,
+  pauses and a missing key keep the name, so it is retried.
+- **When it runs:** the main app only, never an extension. Triggers are app active, each index sync (files arrived),
+  and `recordCapture`. On going to the background with names still waiting, it submits a `BGProcessingTaskRequest`
+  (`com.tejaskale.deepwell.tagging`, needs network). The handler runs one pass and asks again if names are left.
+  Info.plist carries `BGTaskSchedulerPermittedIdentifiers` and `UIBackgroundModes` = `processing`.
+
+## Keys and phone tagging: verified vs not (ticket 16, 2026-11-11)
+
+Verified: `KeychainStoreTests` checks every query for the synchronizable attribute, the access group and the data
+protection keychain, plus each migration path and that SMTP and other items are untouched. `PhoneTaggingTests`
+checks the skip rule, ledger settling, and a racing tag from the other device. Both signed builds (Mac and iOS 6)
+carry `keychain-access-groups` = `NDMG62GXZA.com.tejaskale.deepwell` and processed VALID.
+Not verified: real iCloud Keychain behaviour (the migration on the installed Mac, a key crossing devices), and
+the BGProcessingTask on a device. Phone tagging end to end waits for ticket 18.
 
 ## Summary (persisted)
 

@@ -30,8 +30,12 @@ final class FocusLibrary {
     @ObservationIgnored private var syncTask: Task<Void, Never>?
     @ObservationIgnored private var focusTask: Task<Void, Never>?
 
-    init(location: LibraryLocation) {
+    @ObservationIgnored private let onSynced: @MainActor () -> Void
+
+    /// `onSynced`: after each index sync (files arrived or changed), e.g. to tag what this device captured.
+    init(location: LibraryLocation, onSynced: @escaping @MainActor () -> Void = {}) {
         self.location = location
+        self.onSynced = onSynced
         do {
             let index = try LibraryIndex(url: LibraryIndex.defaultIndexURL())
             self.index = index
@@ -94,6 +98,7 @@ final class FocusLibrary {
             if case .failure(let e) = result { self.errorMessage = "Sync failed: \(e.localizedDescription)" }
             self.isIndexing = false
             self.reloadItems()
+            self.onSynced()
         }
     }
 

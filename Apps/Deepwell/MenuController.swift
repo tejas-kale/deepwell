@@ -19,7 +19,7 @@ final class MenuController {
 
     /// Made per use so a change in Settings > Weekly Menu applies to the next build.
     private var service: MenuService? {
-        store.map { MenuService(index: index, builder: .anthropic(keys: KeychainAPIKeyStore(), settings: settings), store: $0) }
+        store.map { MenuService(index: index, builder: .anthropic(keys: MacKeys.anthropic, settings: settings), store: $0) }
     }
     private var settings: MenuSettings { Preferences.shared.menu }
 

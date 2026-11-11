@@ -16,7 +16,7 @@ final class TaggingController {
     private(set) var keyHint: String?
     private(set) var lastStatus: String?
 
-    init(library: LibraryAccessing, keys: APIKeyStore = KeychainAPIKeyStore()) {
+    init(library: LibraryAccessing, keys: APIKeyStore = MacKeys.anthropic) {
         self.keys = keys
         self.hasKey = keys.load() != nil
         self.keyHint = Self.mask(keys.load())
@@ -36,7 +36,15 @@ final class TaggingController {
         }
     }
 
+    /// A key entered on another device arrives through iCloud Keychain: pick it up on every pass.
+    func refreshKey() {
+        let key = keys.load()
+        if (key != nil) != hasKey { hasKey = key != nil }
+        if Self.mask(key) != keyHint { keyHint = Self.mask(key) }
+    }
+
     func runNow() {
+        refreshKey()
         Task { [service] in
             let s = await service.processPending()
             await MainActor.run {
@@ -67,9 +75,5 @@ final class TaggingController {
 }
 
 extension TaggingController {
-    static func mask(_ key: String?) -> String? {
-        guard let key, key.count > 12 else { return key.map { _ in "••••" } }
-        let prefix = key.hasPrefix("sk-ant-") ? "sk-ant-" : ""
-        return prefix + "…" + key.suffix(4)
-    }
+    static func mask(_ key: String?) -> String? { DeepwellKeys.mask(key) }
 }

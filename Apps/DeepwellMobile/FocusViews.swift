@@ -6,10 +6,14 @@ import DeepwellMenu
 
 /// What the iPad sidebar (and the iPhone tab bar) offers. Library browsing and search come with ticket 19.
 enum MobileSection: String, Hashable, CaseIterable, Identifiable {
-    case focus, reading
+    case focus, reading, settings
     var id: Self { self }
-    var title: String { self == .focus ? "Current Focus" : "Reading" }
-    var symbol: String { self == .focus ? "scope" : "book" }
+    var title: String {
+        switch self { case .focus: "Current Focus"; case .reading: "Reading"; case .settings: "Settings" }
+    }
+    var symbol: String {
+        switch self { case .focus: "scope"; case .reading: "book"; case .settings: "gearshape" }
+    }
 }
 
 /// This week's picked bundle, in pick order, with each item's length and reason and the time-weighted progress.

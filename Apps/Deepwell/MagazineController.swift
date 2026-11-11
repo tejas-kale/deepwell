@@ -16,7 +16,7 @@ final class MagazineController {
     private var timer: Timer?
     private(set) var status: String?
 
-    init(library: LibraryFolderStore, keys: APIKeyStore = KeychainAPIKeyStore(), onNewArticles: @escaping () -> Void) {
+    init(library: LibraryFolderStore, keys: APIKeyStore = MacKeys.anthropic, onNewArticles: @escaping () -> Void) {
         self.library = library
         self.onNewArticles = onNewArticles
         service = MagazineService(library: library, model: AnthropicIssueSplitter(keys: keys), keys: keys)

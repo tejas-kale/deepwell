@@ -15,6 +15,8 @@
 	<key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
 	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes podcast and video audio on this Mac, so you can read items that have no published transcript.</string>
 	<key>DeepwellAppGroup</key><string>$(TeamIdentifierPrefix)dev.deepwell</string>
+	<!-- Ticket 16: the keychain-access-groups entry both apps carry; synced API keys live there. -->
+	<key>DeepwellKeychainGroup</key><string>$(AppIdentifierPrefix)com.tejaskale.deepwell</string>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<key>NSUbiquitousContainers</key>
 	<dict>

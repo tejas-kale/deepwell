@@ -94,7 +94,11 @@ That platform was added on 2026-11-11 (docs/ios.md).
 - **Settings, library bookmark, Keychain keys:** keyed by the bundle id `com.tejaskale.deepwell`, which is
   unchanged. Verified 2026-11-11: the TestFlight build kept the settings, library bookmark and keys written by the
   development-signed build. From build 3 (ticket 13), the library bookmark is read only once more: it is the source
-  of the one-time move into the iCloud container (docs/storage.md).
+  of the one-time move into the iCloud container (docs/storage.md). From build 6 (ticket 16), the Anthropic and
+  OpenRouter keys move at launch from the login keychain to iCloud Keychain items shared with the iOS app. The move
+  copies each key, checks it reads back, and only then deletes the old item; the SMTP password stays where it is
+  (docs/tagging.md, "Keys"). A development-signed or `install.sh` build carries the same `keychain-access-groups`,
+  so it reads the same synced items. The release flow itself is unchanged.
 - Before the first TestFlight install: open the current Deepwell once so pending captures drain, then quit it and
   move the locally built `/Applications/Deepwell.app` to the Trash. TestFlight does not overwrite a differently signed
   copy. It installs next to it as `Deepwell 2.app`, and the scripts treat `/Applications/Deepwell.app` as the

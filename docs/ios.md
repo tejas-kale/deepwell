@@ -88,6 +88,28 @@ Package changes in this ticket: `resolveContainer()`, the `onSharedStateChange` 
 rule, `PodcastPlayerView` in DeepwellUI (DeepwellUI now depends on DeepwellPodcasts for `Item.audioURL`). The Mac
 behaves the same; the podcast "no transcript yet" text says "your Mac" instead of "this Mac".
 
+## Settings and tagging (ticket 16)
+
+- **Settings** is a third iPhone tab and a third iPad sidebar row (`SettingsScreen.swift`, `MobileSettings.swift`):
+  - the Anthropic and OpenRouter keys: set or not set with a masked hint (`sk-ant-…x7Qa`), never the key. Replace
+    opens a secure field. Remove asks first and says the Mac loses the key too, because these are the same iCloud
+    Keychain items the Mac uses (docs/tagging.md, "Keys");
+  - the tagging model (Haiku 5.5 default, or Sonnet 5.5);
+  - the Listen model and voice, which ticket 17 plays with (same `NarrationSettings` and UserDefaults key
+    `narration.settings` as the Mac).
+  
+  Models and voice are per device in UserDefaults for now. Key status is re-read when Settings opens and when the
+  app becomes active.
+- **Entitlements:** `keychain-access-groups` = `$(AppIdentifierPrefix)com.tejaskale.deepwell`, the same as the Mac.
+  The iCloud container and `group.com.tejaskale.deepwell` are unchanged.
+- **Tagging** (`PhoneTagger.swift`): tags only the items this device captured (`CaptureLedger`) that have no tags, in
+  the foreground and in a `BGProcessingTask` (`com.tejaskale.deepwell.tagging`) after going to the background. The
+  rules are in docs/tagging.md, "Tagging on the phone". Ticket 18 records captures through
+  `PhoneTagger.recordCapture(fileName:)`; until then the ledger is empty and no pass runs.
+- New links: DeepwellTagging and DeepwellNarration directly (both were already linked through DeepwellUI) and
+  BackgroundTasks.framework. Info.plist gained `DeepwellKeychainGroup`, `BGTaskSchedulerPermittedIdentifiers` and
+  `UIBackgroundModes` = `processing`.
+
 ## Releasing
 
 `scripts/release.sh --platform ios` archives `DeepwellMobile`, exports an `.ipa` (`build/release/ios/export`), checks
@@ -117,6 +139,18 @@ the team, the app group, the iCloud container and the embedded profile, then val
   in TestFlight, installs and opens on the iPhone. Current Focus shows the Mac's pick and matches the Mac. The Reading
   tab lists the library's one `reading` item, which matches the container (51 items: 49 unread, 1 reading, 1 done), so
   the container resolved and the index was built on the phone.
+
+## Verified for ticket 16 (2026-11-11)
+
+- `swift test`: 13 bundles, 226 tests, 0 failures (new: `KeychainStoreTests` 13, `PhoneTaggingTests` 6).
+- `-scheme DeepwellMobile` and `-scheme DeepwellUI` (iOS Simulator) and the Mac scheme build with
+  `CODE_SIGNING_ALLOWED=NO`.
+- iOS 0.1.0 (6): VERIFY SUCCEEDED, uploaded (delivery `0e089cfc-d256-4cea-8edd-139d65f2bb7c`), processed VALID. The
+  exported app's entitlements: `keychain-access-groups` = `NDMG62GXZA.com.tejaskale.deepwell`, the iCloud container
+  (Production), and `group.com.tejaskale.deepwell`. Info.plist: `DeepwellKeychainGroup` expanded to the same group,
+  `BGTaskSchedulerPermittedIdentifiers`, `UIBackgroundModes` = `processing`.
+- Not verified, on devices: Settings, a key entered on the Mac showing here (and the reverse), the background task.
+  Phone tagging can't run end to end until ticket 18 records captures.
 
 ## Not verified
 

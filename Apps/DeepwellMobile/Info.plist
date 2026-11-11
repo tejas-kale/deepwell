@@ -17,6 +17,17 @@
 	     transcribes (spec: the Mac does). Without it App Store Connect processing rejects the build (ITMS-90683). -->
 	<key>NSSpeechRecognitionUsageDescription</key><string>Deepwell transcribes audio on your Mac. On this device it only reads the transcripts your Mac made.</string>
 	<key>DeepwellAppGroup</key><string>group.com.tejaskale.deepwell</string>
+	<!-- Ticket 16: the keychain-access-groups entry both apps carry; synced API keys live there. -->
+	<key>DeepwellKeychainGroup</key><string>$(AppIdentifierPrefix)com.tejaskale.deepwell</string>
+	<!-- Ticket 16: tagging what this device captured, when the app is backgrounded (BGProcessingTask). -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.tejaskale.deepwell.tagging</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>UILaunchScreen</key><dict/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
