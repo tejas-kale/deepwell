@@ -37,6 +37,22 @@ final class LibraryFolderStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fallback.path))
     }
 
+    func testContainerOnlyResolutionHasNoFallback() throws {
+        let fallback = tmp.appendingPathComponent("fallback", isDirectory: true)
+        let signedOut = LibraryFolderStore(container: FakeContainer(root: nil), localFallback: fallback)
+        XCTAssertNil(signedOut.resolveContainer(), "iOS: signed out means no library")
+        XCTAssertNil(signedOut.location)
+        XCTAssertEqual(signedOut.state, .resolving)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fallback.path), "no local folder is created")
+
+        let signedIn = LibraryFolderStore(container: FakeContainer(root: tmp.appendingPathComponent("iCloud~x")),
+                                          localFallback: fallback)
+        let loc = try XCTUnwrap(signedIn.resolveContainer())
+        XCTAssertEqual(loc, .iCloud(tmp.appendingPathComponent("iCloud~x/Documents", isDirectory: true)))
+        XCTAssertEqual(signedIn.location, loc)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fallback.path))
+    }
+
     func testDefaultFallbackIsInApplicationSupport() {
         XCTAssertTrue(LibraryFolderStore.defaultLocalFallback().path.hasSuffix("Application Support/Deepwell/Library"))
     }

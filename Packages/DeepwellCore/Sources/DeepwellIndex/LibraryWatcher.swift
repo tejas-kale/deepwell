@@ -7,6 +7,8 @@ import DeepwellLibrary
 ///   every item), and files with unresolved conflicts are handed to `onConflicts`.
 /// - In the local fallback (or a fixed folder): FSEvents (`FolderWatcher`) on macOS.
 /// `onChange` runs on a background queue after a burst settles; `onConflicts` runs on a background queue too.
+/// `onSharedStateChange` (container only) fires, on the main queue, when a file in `<library>/.deepwell/` (`menu.json`)
+/// is added or changes; an evicted one is asked to download first. The iOS app refreshes Current Focus from it.
 public final class LibraryWatcher: @unchecked Sendable {
     private var query: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
@@ -16,14 +18,17 @@ public final class LibraryWatcher: @unchecked Sendable {
     private let work = DispatchQueue(label: "deepwell.librarywatcher")
     private let onChange: @Sendable () -> Void
     private let onConflicts: @Sendable ([URL]) -> Void
+    private let onSharedStateChange: (@Sendable () -> Void)?
     private var pendingChange: DispatchWorkItem?
     private let latency: TimeInterval
 
     public init(location: LibraryLocation, latency: TimeInterval = 0.5,
                 onChange: @escaping @Sendable () -> Void,
-                onConflicts: @escaping @Sendable ([URL]) -> Void = { _ in }) {
+                onConflicts: @escaping @Sendable ([URL]) -> Void = { _ in },
+                onSharedStateChange: (@Sendable () -> Void)? = nil) {
         self.onChange = onChange
         self.onConflicts = onConflicts
+        self.onSharedStateChange = onSharedStateChange
         self.latency = latency
         if location.isUbiquitous {
             // NSMetadataQuery must be started on a thread with a run loop; the main one.
@@ -59,11 +64,17 @@ public final class LibraryWatcher: @unchecked Sendable {
         q.disableUpdates()
         let list = items ?? (q.results as? [NSMetadataItem] ?? [])
         var toDownload: [URL] = [], conflicted: [URL] = []
+        var sharedStateChanged = false
         for item in list {
             guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
+            let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
+            if Self.isSharedState(url) {
+                if status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded { toDownload.append(url) }
+                sharedStateChanged = true
+                continue
+            }
             if url.pathComponents.contains(where: { $0.hasPrefix(".") }) { continue }   // .deepwell/, .narration/: not items
             guard url.pathExtension.lowercased() == "md" else { continue }
-            let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             if status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded { toDownload.append(url) }
             if (item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool) == true { conflicted.append(url) }
         }
@@ -73,6 +84,12 @@ public final class LibraryWatcher: @unchecked Sendable {
             if !conflicted.isEmpty { onConflicts(conflicted) }
         }
         scheduleChange()
+        if sharedStateChanged, let onSharedStateChange { onSharedStateChange() }
+    }
+
+    /// A file directly in the library's `.deepwell/` folder (`menu.json`, later `tag-ops.jsonl`).
+    static func isSharedState(_ url: URL) -> Bool {
+        url.deletingLastPathComponent().lastPathComponent == ".deepwell" && !url.lastPathComponent.hasPrefix(".")
     }
 
     private func scheduleChange() {

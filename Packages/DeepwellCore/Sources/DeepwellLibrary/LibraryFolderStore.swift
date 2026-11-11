@@ -90,6 +90,22 @@ public final class LibraryFolderStore: @unchecked Sendable {
         return loc
     }
 
+    /// The iOS app's resolution: the container's `Documents/`, or nil when iCloud is signed out or the container is
+    /// unavailable. Never falls back to a local folder and never creates one (spec: no local fallback on iOS).
+    /// Blocking like `resolve()`; call it off the main thread, and again after `NSUbiquityIdentityDidChange`.
+    public func resolveContainer() -> LibraryLocation? {
+        guard let container else { return location }
+        var loc: LibraryLocation?
+        if let root = container.containerURL() {
+            let docs = root.appendingPathComponent("Documents", isDirectory: true)
+            if (try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)) != nil {
+                loc = .iCloud(docs)
+            }
+        }
+        lock.lock(); resolved = loc; lock.unlock()
+        return loc
+    }
+
     /// The last resolved location (nil before `resolve()`).
     public var location: LibraryLocation? {
         lock.lock(); defer { lock.unlock() }

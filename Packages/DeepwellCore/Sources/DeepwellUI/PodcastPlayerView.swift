@@ -5,9 +5,10 @@ import DeepwellYouTube
 import DeepwellPodcasts
 
 /// Reader view for `type: podcast` items: an audio player above the timestamped transcript.
-/// Tapping a timestamp seeks and plays; the paragraph being played is highlighted.
-struct PodcastPlayerView: View {
+/// Tapping a timestamp seeks and plays; the paragraph being played is highlighted. Shared by the Mac and iOS readers.
+public struct PodcastPlayerView: View {
     let document: ItemDocument
+    public init(document: ItemDocument) { self.document = document }
 
     @State private var player = AVPlayer()
     @State private var isPlaying = false
@@ -19,7 +20,7 @@ struct PodcastPlayerView: View {
     private var segments: [TranscriptSegment] { TranscriptParser.parse(document.body) }
     private var currentID: Int? { segments.last { Double($0.startSeconds) <= position }?.startSeconds }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             controls
             Divider()
@@ -55,7 +56,7 @@ struct PodcastPlayerView: View {
     @ViewBuilder private var transcript: some View {
         if item.needsTranscript {
             ContentUnavailableView("No transcript yet", systemImage: "text.badge.xmark",
-                                   description: Text("This episode has no published transcript. It will be transcribed on this Mac; you can already play the audio."))
+                                   description: Text("This episode has no published transcript. It will be transcribed on your Mac; you can already play the audio."))
         } else if segments.isEmpty {
             ScrollView { Text(document.body).textSelection(.enabled).padding() }
         } else {
@@ -65,7 +66,7 @@ struct PodcastPlayerView: View {
                         ForEach(segments) { seg in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Button(seg.timestamp) { seek(to: Double(seg.startSeconds)); play() }
-                                    .buttonStyle(.link).font(.caption.monospacedDigit()).frame(width: 56, alignment: .trailing)
+                                    .linkButtonStyle().font(.caption.monospacedDigit()).frame(width: 56, alignment: .trailing)
                                 Text(seg.text).textSelection(.enabled)
                             }
                             .padding(4)

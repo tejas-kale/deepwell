@@ -4,7 +4,7 @@
 
 **Blocked by:** 12, 13, 14
 
-**Status:** ready-for-agent
+**Status:** done with unverified items (2026-11-11): built and uploaded to TestFlight as iOS 0.1.0 (4); the five device checks below are not verified yet (docs/ios.md → Not verified)
 
 ## Scope
 
@@ -23,7 +23,7 @@
 - [ ] Reading on both devices, then syncing, leaves no conflict files and keeps the furthest progress (manual two-device test, recorded)
 - [ ] A new pick on the Mac appears on the phone without relaunching
 - [ ] iPad shows three columns; rotation and split view work
-- [ ] `docs/ios.md`: architecture, what is shared, and verified vs not
+- [x] `docs/ios.md`: architecture, what is shared, and verified vs not
 
 Note: the iOS app icon is `Design/AppIcon/fullbleed-1024.png` as a single 1024 universal iOS entry in the mobile
 target's asset catalog (no mask baked in). See `Design/AppIcon/README.md`.

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Archive Deepwell for the Mac (app + Safari and Share extensions), export it for App Store Connect, validate it
-# and upload it to TestFlight. See docs/install.md.
+# Archive Deepwell for the Mac (app + Safari and Share extensions) or for iPhone/iPad (DeepwellMobile), export it
+# for App Store Connect, validate it and upload it to TestFlight. See docs/install.md and docs/ios.md.
 #
-#   scripts/release.sh                 bump CURRENT_PROJECT_VERSION, archive, export, validate, upload
+#   scripts/release.sh                 bump CURRENT_PROJECT_VERSION, archive, export, validate, upload (Mac)
+#   scripts/release.sh --platform ios  the same for the iOS app (one .ipa, iPhone and iPad)
 #   scripts/release.sh --export-only   bump, archive, export and check the package locally; no App Store Connect
 #   scripts/release.sh --keep-build    reuse the current build number (e.g. re-run after a failed archive or upload)
 #
@@ -14,26 +15,37 @@
 #
 # Safe to re-run: every run cleans its own outputs under build/release/. A run bumps the build number before
 # archiving, so a failed run only skips a number. App Store Connect needs a new number for each upload. Uploaded
-# numbers are recorded in build/release/uploaded, and --keep-build refuses to upload the same number twice.
+# numbers are recorded in build/release/uploaded (Mac) and build/release/uploaded-ios, and --keep-build refuses
+# to upload the same number twice for a platform. Both platforms share CURRENT_PROJECT_VERSION.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
 OUT=build/release
-UPLOADED="$OUT/uploaded"
 EXPORT_ONLY=0
 KEEP_BUILD=0
-for arg in "$@"; do
-  case "$arg" in
+PLATFORM=mac
+while (( $# )); do
+  case "$1" in
     --export-only) EXPORT_ONLY=1 ;;
     --keep-build) KEEP_BUILD=1 ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
-    *) echo "error: unknown option $arg (see --help)" >&2; exit 2 ;;
+    --platform) shift; PLATFORM="${1:-}" ;;
+    --platform=*) PLATFORM="${1#--platform=}" ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    *) echo "error: unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
+  shift
 done
 
 die() { echo "error: $*" >&2; exit 1; }
+case "$PLATFORM" in
+  mac) SCHEME=Deepwell; DEST='generic/platform=macOS'; ALTOOL_TYPE=macos
+       ARCHIVE="$OUT/Deepwell.xcarchive"; EXPORT="$OUT/export"; UPLOADED="$OUT/uploaded" ;;
+  ios) SCHEME=DeepwellMobile; DEST='generic/platform=iOS'; ALTOOL_TYPE=ios
+       ARCHIVE="$OUT/ios/DeepwellMobile.xcarchive"; EXPORT="$OUT/ios/export"; UPLOADED="$OUT/uploaded-ios" ;;
+  *) die "--platform must be mac or ios (got '$PLATFORM')" ;;
+esac
 command -v xcodegen >/dev/null || die "xcodegen not found (brew install xcodegen)"
 
 TEAM=$(sed -nE 's/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=[[:space:]]*([A-Z0-9]{10}).*/\1/p' Config/Local.xcconfig 2>/dev/null | tail -1)
@@ -79,11 +91,9 @@ elif [[ $EXPORT_ONLY == 0 ]] && grep -qx "$BUILD" "$UPLOADED" 2>/dev/null; then
   die "build $BUILD was already uploaded; run without --keep-build to bump it"
 fi
 VERSION=$(sed -nE 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*"?([0-9.]+)"?.*/\1/p' project.yml | head -1)
-echo "==> Deepwell $VERSION ($BUILD), team $TEAM"
+echo "==> Deepwell $VERSION ($BUILD) for $PLATFORM, team $TEAM"
 
-ARCHIVE="$OUT/Deepwell.xcarchive"
-EXPORT="$OUT/export"
-mkdir -p "$OUT"
+mkdir -p "$(dirname "$ARCHIVE")"
 rm -rf "$ARCHIVE" "$EXPORT"
 
 echo "==> Generating project"
@@ -92,10 +102,14 @@ xcodegen generate --quiet
 echo "==> Archiving (Release)"
 # The archive is signed for development (export re-signs it for distribution), and development profiles need at
 # least one registered Mac. `archive` does not register one, a Debug `build` does: see "One-time setup" in docs/install.md.
-if ! xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -configuration Release \
-  -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
+# The iOS development profile needs a registered iPhone or iPad (see docs/ios.md).
+if ! xcodebuild -project Deepwell.xcodeproj -scheme "$SCHEME" -configuration Release \
+  -destination "$DEST" -archivePath "$ARCHIVE" \
   -allowProvisioningUpdates \
   DEVELOPMENT_TEAM="$TEAM" archive -quiet; then
+  [[ $PLATFORM == ios ]] && die "archive failed. If it says \"Your team has no devices\", connect your iPhone or iPad,
+       open Deepwell.xcodeproj in Xcode, pick the device as the DeepwellMobile run destination and build once
+       (Xcode registers it), then re-run with --keep-build."
   die "archive failed. If it says \"Your team has no devices\", register this Mac once with:
        xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -destination 'platform=macOS' \\
          -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
@@ -125,6 +139,28 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$OUT/ExportOptions.plist" \
   -allowProvisioningUpdates -quiet \
   || die "export failed. Check Xcode > Settings > Accounts is signed in to the $TEAM Account Holder, then re-run with --keep-build."
+if [[ $PLATFORM == ios ]]; then
+  PKG=$(ls "$EXPORT"/*.ipa 2>/dev/null | head -1)
+  [[ -n "$PKG" ]] || die "export produced no .ipa in $EXPORT"
+  echo "==> Checking the .ipa locally"
+  CHECK="$OUT/ios/ipa-check"
+  rm -rf "$CHECK"
+  ditto -x -k "$PKG" "$CHECK"
+  APP=$(find "$CHECK/Payload" -maxdepth 1 -name '*.app' -type d | head -1)
+  [[ -n "$APP" ]] || die "no .app inside $PKG"
+  codesign --verify --deep --strict "$APP"
+  ents=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert json -o - - )
+  team=$(codesign -dvv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+  groups=$(printf '%s' "$ents" | plutil -extract com\\.apple\\.security\\.application-groups json -o - - 2>/dev/null)
+  icloud=$(printf '%s' "$ents" | plutil -extract com\\.apple\\.developer\\.icloud-container-identifiers json -o - - 2>/dev/null)
+  env=$(printf '%s' "$ents" | plutil -extract com\\.apple\\.developer\\.icloud-container-environment raw -o - - 2>/dev/null || true)
+  printf '    %-32s team=%s groups=%s icloud=%s env=%s\n' "$(basename "$APP")" "$team" "$groups" "$icloud" "$env"
+  [[ "$team" == "$TEAM" ]] || die "$(basename "$APP") is signed by team '$team', expected $TEAM"
+  [[ "$groups" == *'group.com.tejaskale.deepwell'* ]] || die "$(basename "$APP") lacks the app group group.com.tejaskale.deepwell"
+  [[ "$icloud" == *'iCloud.com.tejaskale.deepwell'* ]] || die "$(basename "$APP") lacks the iCloud container"
+  [[ -f "$APP/embedded.mobileprovision" ]] || die "$(basename "$APP") has no embedded.mobileprovision"
+  rm -rf "$CHECK"
+else
 PKG=$(ls "$EXPORT"/*.pkg 2>/dev/null | head -1)
 [[ -n "$PKG" ]] || die "export produced no .pkg in $EXPORT"
 
@@ -150,6 +186,7 @@ done
 # so Safari keeps listing only the installed copy.
 rm -rf "$CHECK"
 scripts/unregister-stale-builds.sh
+fi
 
 if [[ $EXPORT_ONLY == 1 ]]; then
   echo "==> Done (export only): $PKG"
@@ -158,10 +195,10 @@ if [[ $EXPORT_ONLY == 1 ]]; then
 fi
 
 echo "==> Validating with App Store Connect"
-xcrun altool --validate-app -f "$PKG" -t macos "${AUTH_ALTOOL[@]}"
+xcrun altool --validate-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}"
 
 echo "==> Uploading build $BUILD to TestFlight"
-xcrun altool --upload-app -f "$PKG" -t macos "${AUTH_ALTOOL[@]}"
+xcrun altool --upload-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}"
 echo "$BUILD" >> "$UPLOADED"
-echo "==> Uploaded Deepwell $VERSION ($BUILD). Processing takes a few minutes; it then appears in TestFlight."
+echo "==> Uploaded Deepwell $VERSION ($BUILD) for $PLATFORM. Processing takes a few minutes; it then appears in TestFlight."
 echo "    Commit the bumped CURRENT_PROJECT_VERSION in project.yml."

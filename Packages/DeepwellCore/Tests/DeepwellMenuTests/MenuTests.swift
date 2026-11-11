@@ -326,3 +326,69 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(MenuStore(url: tmp.appendingPathComponent("none.json")).load(), MenuState())
     }
 }
+
+/// The iOS app's read path (ticket 15): menu.json is read, never written, and mapped onto the device's items.
+final class CurrentFocusTests: XCTestCase {
+    var library: URL!
+    override func setUpWithError() throws {
+        library = FileManager.default.temporaryDirectory.appendingPathComponent("focus-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+    }
+    override func tearDown() { try? FileManager.default.removeItem(at: library) }
+
+    private let week = Date(timeIntervalSince1970: 1_762_732_800)
+    private func queue() -> WeekQueue {
+        WeekQueue(weekStart: week, pickedAt: week, topic: "Rust", entries: [
+            MenuEntry(itemID: "a", title: "A", minutes: 60, reason: "foundations"),
+            MenuEntry(itemID: "b", title: "B", minutes: 30, reason: "follow-up"),
+            MenuEntry(itemID: "gone", title: "Gone", minutes: 30, reason: "deleted since"),
+        ])
+    }
+
+    func testNoFileMeansNoPickAndCreatesNothing() {
+        let focus = CurrentFocus.load(library: library, items: [])
+        XCTAssertNil(focus.queue)
+        XCTAssertNil(focus.progress)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: library.appendingPathComponent(".deepwell").path),
+                       "reading never creates .deepwell/")
+    }
+
+    func testMenuWithoutPickMeansNoPick() throws {
+        let menu = WeeklyMenu(builtAt: week, weekStart: week, bundles: [])
+        try MenuStore(libraryFolder: library).save(MenuState(menu: menu))
+        XCTAssertNil(CurrentFocus.load(library: library, items: []).queue)
+    }
+
+    func testReadsTheMacsPickInOrderWithoutTouchingTheFile() throws {
+        let store = try MenuStore(libraryFolder: library)
+        try store.save(MenuState(queue: queue(), history: [PickRecord(weekStart: week, topic: "Rust")]))
+        let before = try Data(contentsOf: store.url)
+        let modified = try FileManager.default.attributesOfItem(atPath: store.url.path)[.modificationDate] as? Date
+
+        let items = [Item(id: "b", type: .article, title: "B", status: .reading, progress: 0.5),
+                     Item(id: "a", type: .youtube, title: "A", status: .done, progress: 0.4)]
+        let focus = CurrentFocus.load(library: library, items: items)
+
+        XCTAssertEqual(focus.queue?.topic, "Rust")
+        let rows = try XCTUnwrap(focus.progress?.rows)
+        XCTAssertEqual(rows.map(\.entry.itemID), ["a", "b", "gone"], "pick order, not library order")
+        XCTAssertEqual(rows.map(\.entry.reason), ["foundations", "follow-up", "deleted since"])
+        XCTAssertEqual(rows.map(\.status), [.done, .reading, nil])
+        XCTAssertEqual(rows.map(\.progress), [1, 0.5, 0], "done counts as 1 whatever progress says")
+        // Time-weighted, like the Mac: (60*1 + 30*0.5 + 30*0) / 120.
+        XCTAssertEqual(focus.progress!.fraction, 0.625, accuracy: 1e-9)
+        XCTAssertEqual(focus.progress!.doneCount, 1)
+        XCTAssertEqual(focus.progress!.next?.entry.itemID, "b")
+
+        XCTAssertEqual(try Data(contentsOf: store.url), before, "menu.json is never written")
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: store.url.path)[.modificationDate] as? Date, modified)
+    }
+
+    func testUpdatingItemsKeepsTheQueue() {
+        let focus = CurrentFocus(queue: queue(), items: [])
+        XCTAssertEqual(focus.progress?.fraction, 0)
+        let later = focus.updating(items: [Item(id: "a", type: .article, title: "A", status: .done, progress: 1)])
+        XCTAssertEqual(later.queue, focus.queue)
+        XCTAssertEqual(later.progress!.fraction, 0.5, accuracy: 1e-9)
+    }
+}

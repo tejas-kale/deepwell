@@ -297,6 +297,22 @@ final class IndexTests: XCTestCase {
         XCTAssertEqual(ReadingState.apply(progress: 0.1, to: done), done)
     }
 
+    func testWatcherTreatsOnlyDeepwellFolderFilesAsSharedState() {
+        let lib = URL(fileURLWithPath: "/lib", isDirectory: true)
+        XCTAssertTrue(LibraryWatcher.isSharedState(lib.appendingPathComponent(".deepwell/menu.json")))
+        XCTAssertFalse(LibraryWatcher.isSharedState(lib.appendingPathComponent(".deepwell/.menu.json.icloud")))
+        XCTAssertFalse(LibraryWatcher.isSharedState(lib.appendingPathComponent("item.md")))
+        XCTAssertFalse(LibraryWatcher.isSharedState(lib.appendingPathComponent("item.narration/manifest.json")))
+    }
+
+    func testSaveRuleSkipsTinyMovesButAlwaysSavesTheEnd() {
+        XCTAssertFalse(ReadingState.shouldSave(progress: 0.305, lastSaved: 0.3), "under one percent")
+        XCTAssertTrue(ReadingState.shouldSave(progress: 0.32, lastSaved: 0.3))
+        XCTAssertFalse(ReadingState.shouldSave(progress: 0.2, lastSaved: 0.3), "never backwards")
+        XCTAssertTrue(ReadingState.shouldSave(progress: 0.975, lastSaved: 0.97), "reaching the end always counts")
+        XCTAssertEqual(ReadingState.saveDelayNanoseconds, 700_000_000, "the Mac's debounce, shared with iOS")
+    }
+
     #if os(macOS)
     func testFolderWatcherFiresWhenFileAdded() throws {
         let fired = expectation(description: "change")

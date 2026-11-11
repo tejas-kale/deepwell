@@ -1,7 +1,8 @@
 # Installing Deepwell (TestFlight)
 
-Deepwell installs on every Mac (and later iPhone/iPad, ticket 15) from TestFlight. `scripts/release.sh` archives
-the app with its Safari and Share extensions, exports it for App Store Connect, validates it and uploads one build.
+Deepwell installs on every Mac, iPhone and iPad from TestFlight. `scripts/release.sh` archives the Mac app with its
+Safari and Share extensions (or, with `--platform ios`, the iOS app), exports it for App Store Connect, validates it
+and uploads one build. The iOS app is described in docs/ios.md.
 
 ## One-time setup
 
@@ -37,6 +38,7 @@ You do these yourself, once:
 scripts/release.sh                 # bump CURRENT_PROJECT_VERSION, archive, export, validate, upload
 scripts/release.sh --export-only   # stop after a locally checked .pkg (no API key needed)
 scripts/release.sh --keep-build    # reuse the current build number, e.g. after a failed run
+scripts/release.sh --platform ios  # the iPhone/iPad app instead (combines with the options above)
 ```
 
 Each run:
@@ -63,6 +65,24 @@ your Apple ID.
 
 **Builds expire 90 days after upload.** An expired build stops launching. Upload a fresh one before then (any
 change, or just re-run the script). Expiry does not touch your library: it lives in iCloud Drive, not in the app.
+
+## iPhone and iPad
+
+The iOS app has the same bundle id, so it is the iOS platform of the same App Store Connect app ("Deepwell Reader").
+That platform was added on 2026-11-11 (docs/ios.md).
+
+- `scripts/release.sh --platform ios` archives `DeepwellMobile` to `build/release/ios/`, exports
+  `DeepwellMobile.ipa`, checks the team, the app group `group.com.tejaskale.deepwell`, the iCloud container and the
+  embedded profile, then validates and uploads with `altool -t ios`. Uploaded numbers go to `build/release/uploaded-ios`.
+  The build number is shared with the Mac (`CURRENT_PROJECT_VERSION`), so each upload of either platform bumps it.
+- The archive is development-signed and needs at least one registered iPhone or iPad in the team. The team already had
+  devices on 2026-11-11. On a team without any: connect the device, choose it as the DeepwellMobile run destination in
+  Xcode and build once, which registers it. Then re-run with `--keep-build`.
+- Install: when the build has processed, open App Store Connect > TestFlight > iOS, add the build to your internal
+  group (if the group doesn't pick it up automatically), and install the TestFlight app on the iPhone and iPad, signed in
+  with the same Apple ID. Then install Deepwell from TestFlight.
+- The phone needs iCloud signed in and iCloud Drive on for Deepwell (Settings > your name > iCloud > Drive). Without
+  them it shows "iCloud is off": there is no local library on iOS.
 
 ## Data across the switch
 

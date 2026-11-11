@@ -157,11 +157,11 @@ struct ReaderView: View {
     }
 
     private func progressChanged(_ p: Double) {
-        guard p > lastProgress + 0.01 || p >= ReadingState.doneThreshold else { return }
+        guard ReadingState.shouldSave(progress: p, lastSaved: lastProgress) else { return }
         lastProgress = max(lastProgress, p)
         saveTask?.cancel()
         saveTask = Task {
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: ReadingState.saveDelayNanoseconds)
             if !Task.isCancelled { flush() }
         }
     }

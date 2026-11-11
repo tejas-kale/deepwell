@@ -15,7 +15,9 @@ are handled. Code: `Packages/DeepwellCore/Sources/DeepwellLibrary` (location, mi
   inbox are unchanged.
 - `LibraryFolderStore.resolve()` calls `url(forUbiquityContainerIdentifier:)`, which blocks, so it runs in a detached
   task at launch (`LibraryOpener.open`, from `AppModel.openLibrary`). The window shows "Opening your library…" meanwhile.
-- **Signed out**: if there is no container (iCloud signed out, or iCloud Drive off for Deepwell), the library is
+- **iOS** (docs/ios.md) uses `LibraryFolderStore.resolveContainer()`: the container or nothing. It has no local fallback
+  and shows an "iCloud is off" state instead.
+- **Signed out (Mac)**: if there is no container (iCloud signed out, or iCloud Drive off for Deepwell), the library is
   `~/Library/Application Support/Deepwell/Library` (inside the sandbox container), and a banner says it doesn't
   sync. On `NSUbiquityIdentityDidChange` the app opens the library again. Once the container is available, anything
   saved in the fallback moves in with the same migration as below.
@@ -68,7 +70,8 @@ temp folders.
 ## `.deepwell/`: shared state
 
 - `<library>/.deepwell/menu.json` holds the menu, the pick and the pick history (`MenuStore(libraryFolder:)`). The Mac
-  is the only writer, and the iOS app (ticket 15) reads it. Reads and writes are coordinated.
+  is the only writer. The iOS app reads it through `CurrentFocus.load` (docs/ios.md), which never saves and never
+  creates `.deepwell/`. Reads and writes are coordinated.
 - First run: `MenuStore.adoptLegacy(from:)` moves `~/Library/Application Support/Deepwell/menu.json` there. It copies
   (coordinated), verifies, then deletes. If `.deepwell/menu.json` already exists it wins, and the old file is left untouched.
 - Ticket 19 adds `tag-ops.jsonl` here.
@@ -119,7 +122,7 @@ marks the versions resolved and removes them. The rules:
 Tests: `ConflictMergeTests`. Real conflicts can't be produced on one machine, so the resolver's wiring needs the
 two-device test.
 
-## Manual checks (not verified yet)
+## Manual checks (passed, confirmed by the user on 2026-11-11)
 
 1. Install build 0.1.0 (3) from TestFlight over build 2.
 2. On first launch: "Moving your library into iCloud Drive › Deepwell…", then the library lists the same items.

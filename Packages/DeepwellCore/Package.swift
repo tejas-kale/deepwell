@@ -35,7 +35,7 @@ let package = Package(
         // SwiftUI shared by the Mac app and the iOS companion. Platform differences sit in small `#if os(macOS)` seams.
         .target(name: "DeepwellUI",
                 dependencies: ["DeepwellModel", "DeepwellNarration", "DeepwellIndex", "DeepwellCuration",
-                               "DeepwellYouTube", "DeepwellTranscription"]),
+                               "DeepwellYouTube", "DeepwellTranscription", "DeepwellPodcasts"]),
         .target(name: "DeepwellNarration",
                 dependencies: ["DeepwellModel", "DeepwellTagging", "DeepwellTranscription", "DeepwellIndex"],
                 resources: [.copy("Resources/pronunciations.yml")]),

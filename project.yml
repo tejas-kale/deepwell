@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.tejaskale
   deploymentTarget:
     macOS: "14.0"
+    iOS: "26.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/Base.xcconfig
@@ -12,7 +13,7 @@ settings:
     SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "3"
+    CURRENT_PROJECT_VERSION: "4"
     ENABLE_HARDENED_RUNTIME: YES
     # macOS app extensions default to NO; TestFlight rejects any bundle without embedded.provisionprofile
     # (ITMS-90889), so make automatic signing provision the app and both extensions.
@@ -84,6 +85,47 @@ targets:
           - CloudDocuments
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)dev.deepwell
+  # iPhone/iPad companion (ticket 15, docs/ios.md). Same bundle id as the Mac app (one App Store Connect app, universal
+  # purchase) and the same iCloud container; its own app group (spec Platform). Reads menu.json, never writes it.
+  DeepwellMobile:
+    type: application
+    platform: iOS
+    sources:
+      - Apps/DeepwellMobile
+    dependencies:
+      - package: DeepwellCore
+        product: DeepwellModel
+      - package: DeepwellCore
+        product: DeepwellLibrary
+      - package: DeepwellCore
+        product: DeepwellIndex
+      - package: DeepwellCore
+        product: DeepwellMenu
+      - package: DeepwellCore
+        product: DeepwellUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tejaskale.deepwell
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Apps/DeepwellMobile/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_HARDENED_RUNTIME: NO
+    entitlements:
+      path: Apps/DeepwellMobile/DeepwellMobile.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.tejaskale.deepwell
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.com.tejaskale.deepwell
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.security.application-groups:
+          - group.com.tejaskale.deepwell
   DeepwellSafariExtension:
     type: app-extension
     platform: macOS

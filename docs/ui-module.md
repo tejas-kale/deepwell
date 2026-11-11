@@ -18,6 +18,7 @@ to 6.2 would also switch every target to the Swift 6 language mode.
 | `Apps/Deepwell/YouTubeTranscriptView.swift` | `YouTubeTranscriptView.swift` | `YouTubeTranscriptView(document:)` |
 | `Apps/Deepwell/TagsView.swift` | `TagsView.swift` | `TagsView(model:)`, `TagsModel` protocol |
 | `DeepwellTranscription/TranscriptionStatusView.swift` | `TranscriptionStatusView.swift` | `TranscriptionStatusView` (not used by the app yet) |
+| `Apps/Deepwell/PodcastPlayerView.swift` (ticket 15) | `PodcastPlayerView.swift` | `PodcastPlayerView(document:)`; timestamps use `linkButtonStyle()` |
 
 Everything else is `internal`. `NarrationMark`, `BlockView`, `SpokenWordYKey`, `readerContentSpace`, `linkButtonStyle()` and
 `YouTubeEmbedView` are only used inside the module.
@@ -29,13 +30,14 @@ Everything else is `internal`. `NarrationMark`, `BlockView`, `SpokenWordYKey`, `
 to conform too.
 
 Dependencies: DeepwellModel, DeepwellNarration (`NarrationScript` for the highlight), DeepwellIndex (`TagSummary`),
-DeepwellCuration (`TagCurator`), DeepwellYouTube (transcript parsing), DeepwellTranscription (`TranscriptionStatus`).
+DeepwellCuration (`TagCurator`), DeepwellYouTube (transcript parsing), DeepwellTranscription (`TranscriptionStatus`),
+DeepwellPodcasts (`Item.audioURL`, since ticket 15).
 
 ## What stays in `Apps/Deepwell`
 
 `ReaderView` (the shell: loading/saving, toolbar, status picker, Listen button, issue toggle) and `ListenBar`,
 `NarrationPlayer` (AVAudioPlayer playback; phone Listen is ticket 17), `PaneFocus`, `MenuView`/`MenuController`, Kindle,
-Settings, `Preferences`, `IssueReaderView` (PDFKit/WebKit `NSViewRepresentable`), `PodcastPlayerView`, `LibraryView`,
+Settings, `Preferences`, `IssueReaderView` (PDFKit/WebKit `NSViewRepresentable`), `LibraryView`,
 `LibraryModel`, `AppModel` and the controllers.
 
 ## Seams (`#if os(macOS)`)

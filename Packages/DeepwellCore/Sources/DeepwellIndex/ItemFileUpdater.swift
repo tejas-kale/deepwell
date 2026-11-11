@@ -6,6 +6,15 @@ import DeepwellLibrary
 public enum ReadingState {
     /// Scroll fraction at or above which an item counts as finished.
     public static let doneThreshold = 0.97
+    /// The readers (Mac and iOS) write scroll progress at most this long after the last forward move.
+    public static let saveDelayNanoseconds: UInt64 = 700_000_000
+    /// Smallest forward move worth a write; reaching `doneThreshold` always counts.
+    public static let saveStep = 0.01
+
+    /// Whether a scroll to `progress`, with `lastSaved` already recorded, should schedule a (debounced) write.
+    public static func shouldSave(progress: Double, lastSaved: Double) -> Bool {
+        progress > lastSaved + saveStep || progress >= doneThreshold
+    }
 
     /// Applies a scroll `progress` (0...1) to `item`. Progress only moves forward automatically; an item
     /// already `done` stays done. Starting to scroll turns `unread` into `reading`.
