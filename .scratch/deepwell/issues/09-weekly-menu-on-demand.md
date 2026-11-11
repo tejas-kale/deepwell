@@ -4,7 +4,7 @@
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** built (see docs/menu.md)
 
 - [x] Menu shows 3–5 bundles with topic, total time and ordered items with reasons
 - [x] Bundle time is computed from `word_count`/`duration_minutes` and stays close to 5 hours

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** built (see docs/tagging.md; model id `claude-haiku-5-5` untested against the API)
 
 - [x] API key is saved to and read from the Keychain, never to disk in plain text
 - [x] New captures get tags in the background without blocking capture

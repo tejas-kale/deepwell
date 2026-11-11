@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** built (see spec.md: real iCloud eviction untested; docs/safari-extension.md)
 
 - [x] Library lists items (title, type, captured date, status) and updates when files are added or changed on disk
 - [x] Reader renders Markdown; scroll progress and status (unread/reading/done) are written back to frontmatter

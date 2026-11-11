@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** built (see docs/transcription.md: `AppleSpeechTranscriber` against real audio unverified; YouTube audio fetching is stubbed)
 
 - [x] Items marked "needs transcript" are queued and transcribed in the background, one at a time
 - [x] Progress is visible in the library; the item becomes readable when done

@@ -4,9 +4,9 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** built (fixtures hand-written, not recorded from YouTube; the embed may be refused, with link-out as the fallback)
 
 - [x] Extension detects YouTube video pages and saves `type: youtube` with `duration_minutes`
 - [x] Published captions (preferring manual over auto-generated) become the Markdown body
 - [x] Videos without captions are saved with a "needs transcript" marker for ticket 06
-- [ ] Reader shows the video plus the transcript (view built: Apps/Deepwell/YouTubeTranscriptView.swift, compiles, NOT wired into the reader or run; see docs/safari-extension.md)
+- [x] Reader shows the video plus the transcript (`YouTubeTranscriptView`, wired into the Mac reader in ticket 04, moved to DeepwellUI in ticket 14 and used by the iOS reader since ticket 15; not checked on screen)
