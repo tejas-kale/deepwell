@@ -1,0 +1,60 @@
+# Tests and unsigned builds on every push to main and every pull request (docs-only changes are skipped).
+# A green run on a push to main triggers release.yml (TestFlight). See docs/ci.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", ".scratch/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", ".scratch/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  safari-extension:
+    name: Safari extension (npm test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Extensions/SafariExtension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Extensions/SafariExtension/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  apple:
+    name: Swift tests and app builds
+    # GitHub's Xcode 27 image (macOS 27, Apple Silicon). The code needs the iOS 26+ SDK; macos-26 defaults to Xcode 26.x.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: swift test
+        working-directory: Packages/DeepwellCore
+        run: swift test
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Build the Mac app (unsigned)
+        run: xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO build -quiet
+      - name: Build the iOS app (unsigned, simulator)
+        run: xcodebuild -project Deepwell.xcodeproj -scheme DeepwellMobile -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build -quiet
+      - name: Build DeepwellUI for iOS (unsigned, simulator)
+        working-directory: Packages/DeepwellCore
+        run: xcodebuild -scheme DeepwellUI -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build -quiet

@@ -4,6 +4,9 @@ Deepwell installs on every Mac, iPhone and iPad from TestFlight. `scripts/releas
 Safari and Share extensions (or, with `--platform ios`, the iOS app), exports it for App Store Connect, validates it
 and uploads one build. The iOS app is described in docs/ios.md.
 
+GitHub Actions can run the same script after CI passes on `main` (`--build N --sign-with-api-key`). That needs an
+Admin-role API key in the repository secrets, and its build numbers interact with local uploads: see docs/ci.md.
+
 ## One-time setup
 
 Done by an agent on 2026-11-11 (paid team NDMG62GXZA, individual, so it keeps the free team's ID):

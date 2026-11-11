@@ -1,0 +1,71 @@
+# Publishes the Mac and iOS apps to TestFlight after CI passes on a push to main (or by hand: Actions > Release >
+# Run workflow). Each run uses build number BUILD_NUMBER_OFFSET + run number for both platforms, so numbers only go up
+# and never touch project.yml. Signing uses the App Store Connect API key (no Xcode account on a runner), which must
+# have the Admin role for cloud-managed distribution certificates. Setup: docs/ci.md.
+name: Release to TestFlight
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    name: TestFlight (${{ matrix.platform }})
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: xcode-27
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [mac, ios]
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM }}
+    steps:
+      - name: Check the release secrets
+        id: gate
+        run: |
+          missing=()
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_BASE64 DEVELOPMENT_TEAM; do [[ -n "${!v}" ]] || missing+=("$v"); done
+          if (( ${#missing[@]} )); then
+            echo "::warning::Not publishing: ${missing[*]} not set (repository secrets/variables; see docs/ci.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          # The commit CI tested, not whatever main points at now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Install XcodeGen
+        if: steps.gate.outputs.ready == 'true'
+        run: brew install xcodegen
+      - name: Signing team and API key
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          printf 'DEVELOPMENT_TEAM = %s\n' "$DEVELOPMENT_TEAM" > Config/Local.xcconfig
+          umask 077
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "BUILD=$(( ${{ vars.BUILD_NUMBER_OFFSET || 100 }} + ${{ github.run_number }} ))" >> "$GITHUB_ENV"
+      - name: Archive, export, validate, upload and wait for processing
+        if: steps.gate.outputs.ready == 'true'
+        run: scripts/release.sh --platform ${{ matrix.platform }} --build "$BUILD" --sign-with-api-key
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"

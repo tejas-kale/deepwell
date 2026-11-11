@@ -6,6 +6,10 @@
 #   scripts/release.sh --platform ios  the same for the iOS app (one .ipa, iPhone and iPad)
 #   scripts/release.sh --export-only   bump, archive, export and check the package locally; no App Store Connect
 #   scripts/release.sh --keep-build    reuse the current build number (e.g. re-run after a failed archive or upload)
+#   scripts/release.sh --build N       use build number N for this run only (project.yml untouched; CI uses this)
+#   scripts/release.sh --sign-with-api-key
+#                                      archive and export with the API key instead of the Xcode sign-in (CI: no
+#                                      Xcode account on a runner). Cloud signing needs an Admin-role key.
 #
 # App Store Connect API key, never committed:
 #   ASC_KEY_ID      key id (10 characters)
@@ -25,20 +29,29 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 OUT=build/release
 EXPORT_ONLY=0
 KEEP_BUILD=0
+BUILD_OVERRIDE=""
+SIGN_WITH_KEY=0
 PLATFORM=mac
 while (( $# )); do
   case "$1" in
     --export-only) EXPORT_ONLY=1 ;;
     --keep-build) KEEP_BUILD=1 ;;
+    --build) shift; BUILD_OVERRIDE="${1:-}" ;;
+    --build=*) BUILD_OVERRIDE="${1#--build=}" ;;
+    --sign-with-api-key) SIGN_WITH_KEY=1 ;;
     --platform) shift; PLATFORM="${1:-}" ;;
     --platform=*) PLATFORM="${1#--platform=}" ;;
-    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "error: unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
 done
 
 die() { echo "error: $*" >&2; exit 1; }
+AUTH_XCODEBUILD=()
+[[ -z "$BUILD_OVERRIDE" || "$BUILD_OVERRIDE" =~ ^[0-9]+$ ]] || die "--build needs a number (got '$BUILD_OVERRIDE')"
+[[ -z "$BUILD_OVERRIDE" || $KEEP_BUILD == 0 ]] || die "--build and --keep-build don't go together"
+[[ $SIGN_WITH_KEY == 0 || $EXPORT_ONLY == 0 ]] || die "--sign-with-api-key needs the API key, which --export-only doesn't load"
 case "$PLATFORM" in
   mac) SCHEME=Deepwell; DEST='generic/platform=macOS'; ALTOOL_TYPE=macos
        ARCHIVE="$OUT/Deepwell.xcarchive"; EXPORT="$OUT/export"; UPLOADED="$OUT/uploaded" ;;
@@ -78,13 +91,19 @@ if [[ $EXPORT_ONLY == 0 ]]; then
   chmod 600 "$KEYFILE"
   grep -q 'BEGIN PRIVATE KEY' "$KEYFILE" || die "the API key for $ASC_KEY_ID does not look like a .p8 private key"
   AUTH_ALTOOL=(--api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID")
+  if [[ $SIGN_WITH_KEY == 1 ]]; then
+    AUTH_XCODEBUILD=(-authenticationKeyPath "$KEYFILE" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+  fi
   export API_PRIVATE_KEYS_DIR="$KEYDIR"
 fi
 
 # --- Build number -------------------------------------------------------------------------------------------
 BUILD=$(sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION:[[:space:]]*"?([0-9]+)"?.*/\1/p' project.yml | head -1)
 [[ -n "$BUILD" ]] || die "CURRENT_PROJECT_VERSION not found in project.yml"
-if [[ $KEEP_BUILD == 0 ]]; then
+if [[ -n "$BUILD_OVERRIDE" ]]; then
+  BUILD=$BUILD_OVERRIDE   # passed to xcodebuild below; project.yml is left alone
+  if [[ $EXPORT_ONLY == 0 ]] && grep -qx "$BUILD" "$UPLOADED" 2>/dev/null; then die "build $BUILD was already uploaded"; fi
+elif [[ $KEEP_BUILD == 0 ]]; then
   BUILD=$((BUILD + 1))
   sed -i '' -E "s/^([[:space:]]*CURRENT_PROJECT_VERSION:[[:space:]]*).*/\1\"$BUILD\"/" project.yml
 elif [[ $EXPORT_ONLY == 0 ]] && grep -qx "$BUILD" "$UPLOADED" 2>/dev/null; then
@@ -105,8 +124,8 @@ echo "==> Archiving (Release)"
 # The iOS development profile needs a registered iPhone or iPad (see docs/ios.md).
 if ! xcodebuild -project Deepwell.xcodeproj -scheme "$SCHEME" -configuration Release \
   -destination "$DEST" -archivePath "$ARCHIVE" \
-  -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM="$TEAM" archive -quiet; then
+  -allowProvisioningUpdates ${AUTH_XCODEBUILD[@]+"${AUTH_XCODEBUILD[@]}"} \
+  DEVELOPMENT_TEAM="$TEAM" CURRENT_PROJECT_VERSION="$BUILD" archive -quiet; then
   [[ $PLATFORM == ios ]] && die "archive failed. If it says \"Your team has no devices\", connect your iPhone or iPad,
        open Deepwell.xcodeproj in Xcode, pick the device as the DeepwellMobile run destination and build once
        (Xcode registers it), then re-run with --keep-build."
@@ -134,11 +153,13 @@ PLIST
 echo "==> Exporting for App Store Connect"
 # Signing goes through the Apple ID signed in to Xcode (Account Holder), which may use Apple's cloud-managed
 # distribution certificates. The API key is deliberately not passed here: an App Manager key may not use cloud
-# signing ("Cloud signing permission error"). The key is used only by altool below.
+# signing ("Cloud signing permission error"). The key is used only by altool below, unless --sign-with-api-key
+# (CI, where no Xcode account exists): then the key signs too and must have the Admin role.
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$OUT/ExportOptions.plist" \
-  -allowProvisioningUpdates -quiet \
-  || die "export failed. Check Xcode > Settings > Accounts is signed in to the $TEAM Account Holder, then re-run with --keep-build."
+  -allowProvisioningUpdates ${AUTH_XCODEBUILD[@]+"${AUTH_XCODEBUILD[@]}"} -quiet \
+  || { [[ $SIGN_WITH_KEY == 1 ]] && die "export failed with the API key. Cloud signing needs a key with the Admin role (App Store Connect > Users and Access > Integrations)."
+       die "export failed. Check Xcode > Settings > Accounts is signed in to the $TEAM Account Holder, then re-run with --keep-build."; }
 if [[ $PLATFORM == ios ]]; then
   PKG=$(ls "$EXPORT"/*.ipa 2>/dev/null | head -1)
   [[ -n "$PKG" ]] || die "export produced no .ipa in $EXPORT"
@@ -216,7 +237,7 @@ xcrun altool --upload-app -f "$PKG" -t "$ALTOOL_TYPE" "${AUTH_ALTOOL[@]}" 2>&1 |
 echo "$BUILD" >> "$UPLOADED"
 DELIVERY=$(sed -nE 's/^Delivery UUID: ([0-9a-fA-F-]+).*/\1/p' "$UPLOAD_LOG" | tail -1)
 echo "==> Uploaded Deepwell $VERSION ($BUILD) for $PLATFORM, delivery ${DELIVERY:-unknown}."
-echo "    Commit the bumped CURRENT_PROJECT_VERSION in project.yml."
+[[ -n "$BUILD_OVERRIDE" ]] || echo "    Commit the bumped CURRENT_PROJECT_VERSION in project.yml."
 
 # "UPLOAD SUCCEEDED" only means the file arrived. App Store Connect then processes it and may still reject it
 # (e.g. ITMS-90683, a missing purpose string); such a build never appears in TestFlight. Wait for the verdict.
