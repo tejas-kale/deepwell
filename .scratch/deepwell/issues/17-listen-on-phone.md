@@ -4,7 +4,7 @@
 
 **Blocked by:** 15, 16
 
-**Status:** done (code, tests, Mac upload); iOS upload pending an Xcode sign-in; device checks not verified: locked-screen 20+ min, AirPods/lock-screen controls, interruptions, Mac → phone resume, airplane mode with a pinned item, the badges
+**Status:** done (code, tests, Mac 0.1.0 (9) and iOS 0.1.0 (10) VALID on TestFlight); device checks not verified: locked-screen 20+ min, AirPods/lock-screen controls, interruptions, Mac → phone resume, airplane mode with a pinned item, the badges
 
 - [x] `NarrationSession` (DeepwellNarration) builds and runs on iOS; `AppleSpeechTranscriber` is replaced or complemented by `SpeechAnalyzer` on iOS 26 behind the same `Transcriber` protocol
 - [x] Player bar and highlight come from `DeepwellUI`; tapping a word seeks; "Jump to current" pill as on the Mac

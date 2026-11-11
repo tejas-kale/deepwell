@@ -388,8 +388,13 @@ Not verified (needs a device, checklist):
   `group.com.tejaskale.deepwell` and `keychain-access-groups` `NDMG62GXZA.com.tejaskale.deepwell`. Each extension has
   the team, its own App ID and the iOS group only. Neither extension links Speech, AVFoundation, AVFAudio, PDFKit or
   MediaPlayer, or has DeepwellPodcasts/Transcription/Magazines/Narration symbols. The app links AVFAudio, AVFoundation,
-  MediaPlayer and Speech, and references no media-library or recording API. The export stopped at "No Accounts"
-  (Xcode had signed out after the Mac upload).
+  MediaPlayer and Speech, and references no media-library or recording API.
+- iOS 0.1.0 (10): the exported `.ipa` has the same entitlements as above, plus `get-task-allow` false, and neither
+  extension links any of the frameworks or packages above (otool/nm). Validated, uploaded (delivery
+  `37681c73-e86c-40ed-bf2c-5c26abfad626`) and processed VALID.
+- Release note: after the Mac upload, `xcodebuild -exportArchive` failed with "No Accounts" even though Xcode 27.2's
+  Apple Accounts pane showed the account signed in. `DVTDeveloperAccountManagerAppleIDLists` was empty, even after
+  quitting Xcode. Removing the account and adding it again fixed it. Before an export, check that the list isn't empty.
 
 Not verified (needs a device, checklist):
 

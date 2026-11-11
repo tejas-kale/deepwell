@@ -60,6 +60,9 @@ If the export fails with `exportArchive No Accounts` and `No signing certificate
 has been signed out of that Apple ID (`defaults read com.apple.dt.Xcode DVTDeveloperAccountManagerAppleIDLists` shows
 an empty list). Sign in again in Xcode > Settings > Accounts, then re-run with `--keep-build`. Nothing was uploaded,
 so the number is still free (seen 2026-11-11, Mac build 8; after signing in again, `--keep-build` uploaded it and it processed VALID).
+With Xcode 27.2, the Apple Accounts pane can show the account signed in while that list stays empty, even after quitting
+Xcode, and the export keeps failing. Remove the account in Xcode > Settings > Apple Accounts and add it again, check the
+list isn't empty, then re-run (seen 2026-11-11 for iOS build 10, which then uploaded and processed VALID).
 
 Without `ASC_KEY_ID`/`ASC_ISSUER_ID` the script stops before changing anything and says what is missing. A failed
 run is safe to re-run. It only skips a build number, and `--keep-build` refuses a number that was already uploaded.
