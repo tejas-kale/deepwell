@@ -3,12 +3,21 @@ import AppKit
 import DeepwellModel
 import DeepwellIndex
 import DeepwellMagazines
+import DeepwellNarration
+import DeepwellTranscription
+
+extension Notification.Name {
+    /// Reader > Listen / Pause.
+    static let deepwellListen = Notification.Name("deepwell.listen")
+}
 
 /// Opens one item: downloads it first if iCloud evicted it, renders the Markdown body, and writes scroll
-/// progress / status back to the file's frontmatter.
+/// progress / status back to the file's frontmatter. Articles and magazine articles can be listened to.
 struct ReaderView: View {
     let entry: IndexedItem
     let url: URL
+    /// Library root: where the user's pronunciations.yml lives.
+    let libraryFolder: URL
     let onChanged: () -> Void
 
     enum Phase { case loading, ready(ItemDocument), failed(String) }
@@ -17,6 +26,17 @@ struct ReaderView: View {
     @State private var saveTask: Task<Void, Never>?
     @State private var lastProgress = 0.0
     @State private var showIssue = false
+
+    @State private var blocks: [ArticleBlock] = []
+    @State private var narration: NarrationPlayer?
+    @State private var overlayWords: [Int: [(range: Range<Int>, index: Int)]] = [:]
+    /// Auto-scroll follows the spoken word until the reader scrolls by hand.
+    @State private var following = true
+    private var openRouter: OpenRouterAccount { .shared }
+
+    private func canListen(_ doc: ItemDocument) -> Bool {
+        doc.item.type == .article || (doc.item.type == .magazineArticle && !showIssue)
+    }
 
     var body: some View {
         Group {
@@ -33,15 +53,7 @@ struct ReaderView: View {
                 IssueReaderView(issueID: doc.item.issueID!, libraryFolder: url.deletingLastPathComponent(),
                                 startUnit: IssuePosition.read(doc.item)?.start ?? 0)
             case .ready(let doc):
-                ScrollProgressView(initialProgress: doc.item.progress) { p in progressChanged(p) } content: {
-                    VStack(alignment: .leading, spacing: 20) {
-                        ArticleHeader(item: doc.item)
-                        MarkdownBody(markdown: doc.body)
-                    }
-                    .padding(.horizontal, 32).padding(.vertical, 40)
-                    .frame(maxWidth: 700, alignment: .leading)
-                    .frame(maxWidth: .infinity)
-                }
+                article(doc)
             }
         }
         .toolbar {
@@ -54,6 +66,16 @@ struct ReaderView: View {
                     .pickerStyle(.segmented)
                 }
             }
+            if case .ready(let doc) = phase, canListen(doc) {
+                ToolbarItem {
+                    Button { listen() } label: {
+                        Label(narration?.state == .playing ? "Pause" : "Listen",
+                              systemImage: narration?.state == .playing ? "pause.fill" : "headphones")
+                    }
+                    .disabled(!openRouter.hasKey)
+                    .help(openRouter.hasKey ? "Listen to this article (⇧⌘L)" : "Add an OpenRouter key in Settings > OpenRouter to listen")
+                }
+            }
             ToolbarItem {
                 Picker("Status", selection: Binding(get: { status }, set: setStatus)) {
                     ForEach(ItemStatus.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
@@ -62,7 +84,62 @@ struct ReaderView: View {
             }
         }
         .task { await load() }
-        .onDisappear { saveTask?.cancel(); flush() }
+        .onChange(of: showIssue) { if showIssue { narration?.stop() } }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellListen)) { _ in
+            if case .ready(let doc) = phase, canListen(doc), openRouter.hasKey { listen() }
+        }
+        .onDisappear { narration?.stop(); saveTask?.cancel(); flush() }
+    }
+
+    @ViewBuilder
+    private func article(_ doc: ItemDocument) -> some View {
+        let n = narration?.isActive == true ? narration : nil
+        let overlay = n.map { NarrationOverlay(script: $0.session.script, current: $0.currentWord, words: overlayWords) }
+        ScrollProgressView(initialProgress: doc.item.progress,
+                           following: n != nil && following,
+                           onUserScroll: { if n != nil { following = false } },
+                           onProgress: { p in progressChanged(p) }) {
+            VStack(alignment: .leading, spacing: 20) {
+                ArticleHeader(item: doc.item)
+                MarkdownBody(blocks: blocks, overlay: overlay) { w in following = true; narration?.play(fromWord: w) }
+            }
+            .padding(.horizontal, 32).padding(.vertical, 40)
+            .padding(.bottom, n == nil ? 0 : 40)
+            .frame(maxWidth: 700, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .overlay(alignment: .bottom) {
+            if let n {
+                VStack(spacing: 8) {
+                    if !following {
+                        Button { following = true } label: { Label("Jump to current", systemImage: "arrow.down.to.line") }
+                            .buttonStyle(.borderedProminent).controlSize(.small).tint(Ayu.accent)
+                    }
+                    ListenBar(player: n)
+                }
+                .padding(12)
+            }
+        }
+    }
+
+    private func listen() {
+        if let narration { narration.toggle(); return }
+        guard case .ready(let doc) = phase else { return }
+        let session = NarrationSession(
+            item: doc.item, body: doc.body, folder: NarrationSession.folder(forItemFile: url),
+            settings: Preferences.shared.narration,
+            pronunciations: PronunciationStore(libraryFolder: libraryFolder).merged(),
+            keys: openRouter.keys, transcriber: AppleSpeechTranscriber(locale: Locale(identifier: "en-US")))
+        let player = NarrationPlayer(session: session, title: doc.item.title)
+        player.onProgress = { p in progressChanged(p) }
+        player.onFinished = { setStatus(.done) }
+        overlayWords = NarrationOverlay.words(of: session.script)
+        narration = player
+        following = true
+        Task {
+            await session.open()
+            player.start()
+        }
     }
 
     private func load() async {
@@ -72,6 +149,7 @@ struct ReaderView: View {
             let doc = try FrontmatterCodec.decode(text)
             status = doc.item.status
             lastProgress = doc.item.progress
+            blocks = ArticleBlocks.blocks(for: doc.body)
             phase = .ready(doc)
         } catch {
             phase = .failed("Could not open this item: \(error.localizedDescription)")
@@ -104,6 +182,61 @@ struct ReaderView: View {
     }
 }
 
+/// Bottom bar while listening: play/pause, sentence back and forward, speed, progress, and generation or error state.
+struct ListenBar: View {
+    let player: NarrationPlayer
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button { player.previousSentence() } label: { Image(systemName: "backward.end.fill") }
+                .help("Previous sentence")
+            Button { player.toggle() } label: {
+                Image(systemName: player.state == .playing ? "pause.fill" : "play.fill").frame(width: 18)
+            }
+            .help(player.state == .playing ? "Pause" : "Play")
+            Button { player.nextSentence() } label: { Image(systemName: "forward.end.fill") }
+                .help("Next sentence")
+
+            ProgressView(value: player.progress).frame(minWidth: 80)
+
+            if let error = player.error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Ayu.red).lineLimit(1).truncationMode(.tail)
+                    .help(error)
+                Button("Retry") { player.retry() }
+            } else if player.state == .loading || player.state == .waiting {
+                ProgressView().controlSize(.small)
+                Text(player.state == .waiting ? "Generating…" : "Loading…").foregroundStyle(.secondary)
+            } else if player.isGenerating {
+                Image(systemName: "waveform").foregroundStyle(.secondary).help("Generating audio ahead")
+            }
+
+            Menu {
+                ForEach(NarrationPlayer.speeds, id: \.self) { s in
+                    Button { player.rate = s } label: {
+                        if s == player.rate { Label(Self.speed(s), systemImage: "checkmark") } else { Text(Self.speed(s)) }
+                    }
+                }
+            } label: { Text(Self.speed(player.rate)).monospacedDigit() }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("Playback speed")
+
+            Button { player.stop() } label: { Image(systemName: "xmark") }.help("Stop listening")
+        }
+        .buttonStyle(.borderless)
+        .font(.callout)
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(maxWidth: 640)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.quaternary))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+    }
+
+    static func speed(_ s: Float) -> String {
+        s == s.rounded() ? "\(Int(s))×" : String(format: "%g×", s)
+    }
+}
+
 private struct Metrics: Equatable { var offset: CGFloat = 0; var content: CGFloat = 0 }
 private struct MetricsKey: PreferenceKey {
     static var defaultValue = Metrics()
@@ -111,28 +244,48 @@ private struct MetricsKey: PreferenceKey {
 }
 
 /// ScrollView that reports how far (0...1) the user has scrolled and restores the saved position.
+///
+/// While narrating with `following` on, it keeps the spoken word (`SpokenWordYKey`) in a comfortable band: when the word
+/// drops below ~70% of the viewport (or above ~12%), the page moves once so the word sits at ~28%, like turning a page.
+/// It never moves for every word, so it doesn't bob. A scroll gesture by the reader calls `onUserScroll`.
 struct ScrollProgressView<Content: View>: View {
     let initialProgress: Double
+    var following = false
+    var onUserScroll: () -> Void = {}
     let onProgress: (Double) -> Void
     @ViewBuilder let content: Content
 
-    @State private var viewport: CGFloat = 0
     @State private var restored = false
-    @State private var contentHeight: CGFloat = 0
+    @State private var offset: CGFloat = 0
+    @State private var viewport: CGFloat = 0
+    @State private var wordY: CGFloat?
+    @State private var scroller = NativeScroller()
+
+    private static var bandTop: CGFloat { 0.12 }
+    private static var bandBottom: CGFloat { 0.70 }
+    private static var settle: CGFloat { 0.28 }
 
     var body: some View {
         GeometryReader { outer in
             ScrollViewReader { proxy in
                 ScrollView {
                     content
+                        .coordinateSpace(name: readerContentSpace)
                         .background(GeometryReader { g in
                             Color.clear.preference(key: MetricsKey.self, value: Metrics(offset: -g.frame(in: .named("reader")).minY, content: g.size.height))
                         })
+                        .background(ScrollViewFinder(scroller: scroller, onUserScroll: { onUserScroll() }))
                         .id("content")
                 }
                 .coordinateSpace(name: "reader")
+                .onPreferenceChange(SpokenWordYKey.self) { y in
+                    wordY = y
+                    keepWordInView(force: false)
+                }
+                .onChange(of: following) { if following { keepWordInView(force: true) } }
                 .onPreferenceChange(MetricsKey.self) { m in
-                    contentHeight = m.content
+                    offset = m.offset
+                    viewport = outer.size.height
                     let scrollable = m.content - outer.size.height
                     if !restored {
                         guard m.content > 0 else { return }
@@ -150,6 +303,60 @@ struct ScrollProgressView<Content: View>: View {
                 }
             }
         }
+    }
+
+    private func keepWordInView(force: Bool) {
+        guard following, let y = wordY, viewport > 0 else { return }
+        let inView = y - offset
+        guard force || inView < viewport * Self.bandTop || inView > viewport * Self.bandBottom else { return }
+        scroller.scroll(by: inView - viewport * Self.settle)
+    }
+}
+
+/// The AppKit scroll view under a SwiftUI `ScrollView`: animated programmatic scrolling, and real scroll gestures
+/// (`willStartLiveScroll`) told apart from our own.
+@MainActor
+final class NativeScroller {
+    weak var scrollView: NSScrollView?
+    private var observer: NSObjectProtocol?
+    var onUserScroll: () -> Void = {}
+
+    func attach(_ sv: NSScrollView?) {
+        guard let sv, sv !== scrollView else { return }
+        scrollView = sv
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = NotificationCenter.default.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: sv, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onUserScroll() }
+        }
+    }
+
+    /// Scrolls the content by `dy` points (positive: further down the article), clamped, eased.
+    func scroll(by dy: CGFloat) {
+        guard let sv = scrollView, let doc = sv.documentView, abs(dy) > 4 else { return }
+        let clip = sv.contentView
+        var origin = clip.bounds.origin
+        origin.y += doc.isFlipped ? dy : -dy
+        let target = clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.35
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            ctx.allowsImplicitAnimation = true
+            clip.animator().setBoundsOrigin(target)
+        } completionHandler: {
+            sv.reflectScrolledClipView(clip)
+        }
+    }
+
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+}
+
+private struct ScrollViewFinder: NSViewRepresentable {
+    let scroller: NativeScroller
+    let onUserScroll: () -> Void
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ v: NSView, context: Context) {
+        scroller.onUserScroll = onUserScroll
+        DispatchQueue.main.async { scroller.attach(v.enclosingScrollView) }
     }
 }
 

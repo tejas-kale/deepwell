@@ -4,40 +4,39 @@ import DeepwellModel
 /// Small block-level Markdown renderer (headings, paragraphs, lists, quotes, code fences, rules, images).
 /// Inline styling (bold, italic, code, links) comes from AttributedString's Markdown parser.
 /// Lists and quotes use the same serif body type as paragraphs; consecutive list items sit close together.
+/// Blocks come from `ArticleBlocks`, the same parse narration uses, so the spoken word can be highlighted in place.
+/// Each block is tagged `MarkdownBody.blockID(i)` for scrolling.
 struct MarkdownBody: View {
     static let bodyFont = Font.system(size: 17, design: .serif)
     static let bodyLineSpacing: CGFloat = 7
+    static func blockID(_ i: Int) -> String { "block-\(i)" }
 
-    let markdown: String
+    let blocks: [ArticleBlock]
+    /// While narration plays: the word and sentence to mark, and the words that seek when clicked.
+    var overlay: NarrationOverlay?
+    var onWord: (Int) -> Void = { _ in }
 
-    enum Block: Equatable {
-        case heading(Int, String)
-        case paragraph(String)
-        case bullet(String, indent: Int)
-        case numbered(String, String)
-        case quote(String)
-        case code(String)
-        case rule
-        case image(alt: String, url: URL)
-        case caption(String)
+    init(markdown: String) { blocks = ArticleBlocks.blocks(for: markdown) }
+    init(blocks: [ArticleBlock], overlay: NarrationOverlay?, onWord: @escaping (Int) -> Void) {
+        self.blocks = blocks; self.overlay = overlay; self.onWord = onWord
     }
 
     /// A run of blocks laid out together: list items and quote lines get tight spacing inside the group.
-    private struct Run: Identifiable { let id: Int; let blocks: [Block]; let tight: Bool }
+    private struct Run: Identifiable { let id: Int; let blocks: [(Int, ArticleBlock)]; let tight: Bool }
 
-    private static func groups(_ blocks: [Block]) -> [Run] {
+    private static func groups(_ blocks: [ArticleBlock]) -> [Run] {
         var out: [Run] = []
-        var run: [Block] = []
+        var run: [(Int, ArticleBlock)] = []
         var runKind: Int?   // 0 list, 1 quote
         func flush() { if !run.isEmpty { out.append(Run(id: out.count, blocks: run, tight: true)); run = [] } }
-        for b in blocks {
+        for (i, b) in blocks.enumerated() {
             let kind: Int? = switch b { case .bullet, .numbered: 0; case .quote: 1; default: nil }
             if let kind {
                 if kind != runKind { flush() }
-                runKind = kind; run.append(b)
+                runKind = kind; run.append((i, b))
             } else {
                 flush(); runKind = nil
-                out.append(Run(id: out.count, blocks: [b], tight: false))
+                out.append(Run(id: out.count, blocks: [(i, b)], tight: false))
             }
         }
         flush()
@@ -46,57 +45,117 @@ struct MarkdownBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            ForEach(Self.groups(ArticleCleaner.clean(Self.parse(MarkdownRepair.repair(markdown))))) { g in
-                if g.tight, case .quote = g.blocks[0] {
+            ForEach(Self.groups(blocks)) { g in
+                if g.tight, case .quote = g.blocks[0].1 {
                     quote(g.blocks)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(g.blocks.enumerated()), id: \.offset) { _, block in view(for: block) }
+                        ForEach(g.blocks, id: \.0) { i, block in blockView(i, block) }
                     }
                 }
             }
         }
         .textSelection(.enabled)
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == NarrationMark.scheme, let w = Int(url.host ?? "") else { return .systemAction }
+            onWord(w)
+            return .handled
+        })
+    }
+
+    private func blockView(_ i: Int, _ block: ArticleBlock) -> some View {
+        let mark = NarrationMark(overlay, block: i)
+        return BlockView(block: block, mark: mark).equatable()
+            .background {
+                // The block being read reports where the spoken word is, for auto-follow.
+                if let f = mark?.wordFraction {
+                    GeometryReader { g in
+                        Color.clear.preference(key: SpokenWordYKey.self,
+                                               value: g.frame(in: .named(readerContentSpace)).minY + f * g.size.height)
+                    }
+                }
+            }
+            .id(Self.blockID(i))
     }
 
     /// Consecutive quote lines form one quote: body-size serif italic beside an accent bar.
-    private func quote(_ blocks: [Block]) -> some View {
+    private func quote(_ blocks: [(Int, ArticleBlock)]) -> some View {
         HStack(alignment: .top, spacing: 14) {
             RoundedRectangle(cornerRadius: 1.5).fill(Ayu.accent.opacity(0.7)).frame(width: 3)
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
-                    if case .quote(let text) = b {
-                        inline(text).font(Self.bodyFont.italic()).lineSpacing(Self.bodyLineSpacing).foregroundStyle(.secondary)
-                    }
-                }
+                ForEach(blocks, id: \.0) { i, b in blockView(i, b) }
             }
         }
         .padding(.vertical, 2)
         .fixedSize(horizontal: false, vertical: true)
     }
+}
 
-    @ViewBuilder
-    private func view(for block: Block) -> some View {
+/// One block's share of the narration overlay. `nil` fields mean "nothing to mark here".
+struct NarrationMark: Equatable {
+    static let scheme = "deepwell-word"
+
+    var word: Range<Int>?
+    var sentence: Range<Int>?
+    /// Present while narrating: every narrated word in the block becomes a click target.
+    var words: [Range<Int>: Int]?
+    /// How far into the block the spoken word is (0...1, by characters): approximates its line.
+    var wordFraction: Double?
+
+    init?(_ overlay: NarrationOverlay?, block: Int) {
+        guard let overlay else { return nil }
+        word = overlay.word?.block == block ? overlay.word?.range : nil
+        sentence = overlay.sentence[block]
+        words = overlay.words[block].map { Dictionary($0.map { ($0.range, $0.index) }, uniquingKeysWith: { a, _ in a }) }
+        if let w = word, let end = overlay.words[block]?.last?.range.upperBound, end > 0 {
+            wordFraction = Double(w.lowerBound) / Double(end)
+        }
+    }
+
+    /// The inline text with the sentence tinted, the word marked, and words as seek links.
+    func apply(to a: inout AttributedString) {
+        let chars = a.characters
+        func range(_ r: Range<Int>) -> Range<AttributedString.Index>? {
+            guard r.lowerBound >= 0, r.upperBound <= chars.count else { return nil }
+            let lo = chars.index(chars.startIndex, offsetBy: r.lowerBound)
+            return lo..<chars.index(lo, offsetBy: r.count)
+        }
+        if let words {
+            for (r, w) in words {
+                if let rr = range(r) { a[rr].link = URL(string: "\(Self.scheme)://\(w)") }
+            }
+        }
+        if let s = sentence, let rr = range(s) { a[rr].backgroundColor = Ayu.accent.opacity(0.10) }
+        if let w = word, let rr = range(w) { a[rr].backgroundColor = Ayu.accent.opacity(0.32) }
+    }
+}
+
+/// One block. Equatable, so while narrating only the blocks whose marks change are redrawn.
+private struct BlockView: View, Equatable {
+    let block: ArticleBlock
+    let mark: NarrationMark?
+
+    var body: some View {
         switch block {
         case .heading(let level, let text):
             inline(text).font(.system(level == 1 ? .title : level == 2 ? .title2 : .title3, design: .serif).bold()).padding(.top, 14)
         case .paragraph(let text):
-            inline(text).font(Self.bodyFont).lineSpacing(Self.bodyLineSpacing)
+            inline(text).font(MarkdownBody.bodyFont).lineSpacing(MarkdownBody.bodyLineSpacing)
         case .bullet(let text, let indent):
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(indent == 0 ? "•" : "◦").foregroundStyle(.secondary)
-                inline(text).lineSpacing(Self.bodyLineSpacing)
+                inline(text).lineSpacing(MarkdownBody.bodyLineSpacing)
             }
-            .font(Self.bodyFont)
+            .font(MarkdownBody.bodyFont)
             .padding(.leading, CGFloat(indent) * 22 + 6)
         case .numbered(let n, let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(n).monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 22, alignment: .trailing)
-                inline(text).lineSpacing(Self.bodyLineSpacing)
+                inline(text).lineSpacing(MarkdownBody.bodyLineSpacing)
             }
-            .font(Self.bodyFont)
-        case .quote:
-            quote([block])
+            .font(MarkdownBody.bodyFont)
+        case .quote(let text):
+            inline(text).font(MarkdownBody.bodyFont.italic()).lineSpacing(MarkdownBody.bodyLineSpacing).foregroundStyle(.secondary)
         case .code(let text):
             Text(text).font(.system(.callout, design: .monospaced)).padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,49 +182,20 @@ struct MarkdownBody: View {
         }
     }
 
-    private func inline(_ s: String) -> Text {
-        let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        if let a = try? AttributedString(markdown: s, options: opts) { return Text(a) }
-        return Text(s)
+    /// While narrating, words are seek links: keep them in the text colour rather than the link tint.
+    private func inline(_ s: String) -> some View {
+        var a = ArticleBlocks.attributed(s)
+        mark?.apply(to: &a)
+        return Text(a)
+            .tint(mark?.words != nil ? Ayu.text : Ayu.accent)
     }
+}
 
-    static func parse(_ md: String) -> [Block] {
-        var blocks: [Block] = []
-        var para: [String] = []
-        var code: [String]?
-        func flush() {
-            if !para.isEmpty { blocks.append(.paragraph(para.joined(separator: " "))); para = [] }
-        }
-        for raw in md.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n") {
-            if code != nil {
-                if raw.hasPrefix("```") { blocks.append(.code(code!.joined(separator: "\n"))); code = nil } else { code!.append(raw) }
-                continue
-            }
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if raw.hasPrefix("```") { flush(); code = []; continue }
-            if line.isEmpty { flush(); continue }
-            if let h = heading(line) { flush(); blocks.append(h); continue }
-            if let m = line.firstMatch(of: /^!\[([^\]]*)\]\(([^)\s]+)[^)]*\)$/), let u = URL(string: String(m.2)) {
-                flush(); blocks.append(.image(alt: String(m.1), url: u)); continue
-            }
-            if line.allSatisfy({ $0 == "-" || $0 == "*" || $0 == "_" }), line.count >= 3 { flush(); blocks.append(.rule); continue }
-            if line.hasPrefix(">") { flush(); blocks.append(.quote(String(line.dropFirst()).trimmingCharacters(in: .whitespaces))); continue }
-            if let m = line.firstMatch(of: /^[-*+]\s+(.*)$/) {
-                flush()
-                let indent = raw.prefix { $0 == " " }.count / 2
-                blocks.append(.bullet(String(m.1), indent: indent)); continue
-            }
-            if let m = line.firstMatch(of: /^(\d+)[.)]\s+(.*)$/) { flush(); blocks.append(.numbered("\(m.1).", String(m.2))); continue }
-            para.append(line)
-        }
-        if let c = code { blocks.append(.code(c.joined(separator: "\n"))) }
-        flush()
-        return blocks
-    }
+/// Coordinate space of the reader's scrolled content (set by `ScrollProgressView`).
+let readerContentSpace = "reader-content"
 
-    private static func heading(_ line: String) -> Block? {
-        let hashes = line.prefix { $0 == "#" }.count
-        guard (1...6).contains(hashes), line.dropFirst(hashes).first == " " else { return nil }
-        return .heading(hashes, line.dropFirst(hashes).trimmingCharacters(in: .whitespaces))
-    }
+/// Estimated y of the spoken word in `readerContentSpace`.
+struct SpokenWordYKey: PreferenceKey {
+    static var defaultValue: CGFloat?
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = value ?? nextValue() }
 }

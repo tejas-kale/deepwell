@@ -56,7 +56,7 @@ struct LibraryView: View {
         } detail: {
             Group {
                 if let path = selection, let entry = model.entry(path: path) {
-                    ReaderView(entry: entry, url: model.fileURL(for: entry)) { model.scheduleSync() }
+                    ReaderView(entry: entry, url: model.fileURL(for: entry), libraryFolder: model.folder) { model.scheduleSync() }
                         .id(entry.relativePath)
                 } else {
                     Text("Select an item").foregroundStyle(.secondary)

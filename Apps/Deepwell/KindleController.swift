@@ -6,7 +6,7 @@ import DeepwellMenu
 import DeepwellModel
 import DeepwellTagging
 
-/// Thin glue over DeepwellKindle: settings (UserDefaults), the two secrets (Keychain), when each focus was sent,
+/// Thin glue over DeepwellKindle: settings (UserDefaults), the SMTP password (Keychain; the OpenRouter key is `OpenRouterAccount`), when each focus was sent,
 /// and the send itself. Packing and SMTP logic live in the package.
 @Observable
 @MainActor
@@ -16,9 +16,7 @@ final class KindleController {
 
     var settings: KindleSettings { didSet { saveSettings() } }
     let smtpPassword: APIKeyStore = KeychainAPIKeyStore(service: "com.tejaskale.deepwell.smtp", account: "password")
-    let openRouterKey: APIKeyStore = KeychainAPIKeyStore(service: "com.tejaskale.deepwell.openrouter", account: "api-key")
     private(set) var hasPassword: Bool
-    private(set) var hasOpenRouterKey: Bool
 
     private(set) var isSending = false
     private(set) var status: String?
@@ -28,7 +26,6 @@ final class KindleController {
         let d = UserDefaults.standard
         settings = d.data(forKey: Self.settingsKey).flatMap { try? JSONDecoder().decode(KindleSettings.self, from: $0) } ?? KindleSettings()
         hasPassword = smtpPassword.load() != nil
-        hasOpenRouterKey = openRouterKey.load() != nil
     }
 
     private func saveSettings() {
@@ -37,8 +34,6 @@ final class KindleController {
 
     func savePassword(_ s: String) throws { try smtpPassword.save(s); hasPassword = smtpPassword.load() != nil }
     func removePassword() throws { try smtpPassword.delete(); hasPassword = false }
-    func saveOpenRouterKey(_ s: String) throws { try openRouterKey.save(s); hasOpenRouterKey = openRouterKey.load() != nil }
-    func removeOpenRouterKey() throws { try openRouterKey.delete(); hasOpenRouterKey = false }
 
     // MARK: Sent log
 
@@ -71,7 +66,8 @@ final class KindleController {
         guard !entries.isEmpty else { return fail("Nothing to send: this focus has no unfinished articles or magazine articles.") }
         let files = entries.map { library.fileURL(for: $0) }
         let settings = self.settings
-        let artist: CoverArtist? = hasOpenRouterKey ? OpenRouterCoverArt(keys: openRouterKey) : nil
+        let openRouter = OpenRouterAccount.shared
+        let artist: CoverArtist? = openRouter.hasKey ? OpenRouterCoverArt(keys: openRouter.keys) : nil
         isSending = true
         report("Preparing \(entries.count) article\(entries.count == 1 ? "" : "s") for Kindle…")
 

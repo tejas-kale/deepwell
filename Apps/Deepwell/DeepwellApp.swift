@@ -33,8 +33,12 @@ struct DeepwellApp: App {
                 Divider()
                 Button("Rebuild Index") { NotificationCenter.default.post(name: .deepwellRebuildIndex, object: nil) }
             }
+            CommandMenu("Reader") {
+                Button("Listen / Pause") { NotificationCenter.default.post(name: .deepwellListen, object: nil) }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+            }
         }
-        Settings { SettingsView(tagging: model.tagging, kindle: model.kindle, preferences: Preferences.shared) }
+        Settings { SettingsView(tagging: model.tagging, kindle: model.kindle, preferences: Preferences.shared, libraryFolder: model.libraryFolder) }
     }
 
     private func focus(_ p: Pane) { NotificationCenter.default.post(name: .deepwellFocusPane, object: p.rawValue) }

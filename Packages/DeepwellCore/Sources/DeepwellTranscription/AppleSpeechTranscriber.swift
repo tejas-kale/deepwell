@@ -31,20 +31,23 @@ public struct AppleSpeechTranscriber: Transcriber {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[TimedWord], Error>) in
                 let done = Flag()
+                let merger = MergerBox()
                 box.task = recognizer.recognitionTask(with: request) { result, error in
                     guard !done.value else { return }
                     if let result {
+                        // Every result, not just the final one: later results hold only the latest utterance.
+                        merger.value.add(result.bestTranscription.segments.map { TimedWord(start: $0.timestamp, text: $0.substring) })
                         if result.isFinal {
                             done.value = true
-                            cont.resume(returning: result.bestTranscription.segments.map {
-                                TimedWord(start: $0.timestamp, text: $0.substring)
-                            })
+                            cont.resume(returning: merger.value.words)
                         } else if duration > 0, let last = result.bestTranscription.segments.last {
                             progress(min(0.99, (last.timestamp + last.duration) / duration))
                         }
                     } else if let error {
                         done.value = true
-                        cont.resume(throwing: error)
+                        // A trailing "no speech" error after real results still leaves a usable transcript.
+                        let words = merger.value.words
+                        if words.isEmpty { cont.resume(throwing: error) } else { cont.resume(returning: words) }
                     }
                 }
             }
@@ -53,6 +56,7 @@ public struct AppleSpeechTranscriber: Transcriber {
 
     private final class TaskBox: @unchecked Sendable { var task: SFSpeechRecognitionTask? }
     private final class Flag: @unchecked Sendable { var value = false }
+    private final class MergerBox: @unchecked Sendable { var value = UtteranceMerger() }
 
     static func authorize() async throws {
         let status = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in

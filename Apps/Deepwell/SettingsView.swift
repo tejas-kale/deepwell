@@ -1,12 +1,16 @@
 import SwiftUI
+import AVFoundation
 import DeepwellKindle
 import DeepwellMenu
+import DeepwellNarration
 
 /// One Anthropic key: when one is stored it is shown masked with Replace and Remove; otherwise a field to add it.
 struct SettingsView: View {
     let tagging: TaggingController
     let kindle: KindleController
     let preferences: Preferences
+    /// Library root, for the pronunciation map (nil until a library folder is chosen).
+    let libraryFolder: URL?
 
     var body: some View {
         TabView {
@@ -14,6 +18,8 @@ struct SettingsView: View {
             AnthropicSettingsView(tagging: tagging).tabItem { Label("Anthropic", systemImage: "sparkles") }
             MenuSettingsView(preferences: preferences).tabItem { Label("Weekly Menu", systemImage: "square.stack") }
             KindleSettingsView(kindle: kindle).tabItem { Label("Kindle", systemImage: "book") }
+            OpenRouterSettingsView(account: OpenRouterAccount.shared).tabItem { Label("OpenRouter", systemImage: "key") }
+            ListenSettingsView(preferences: preferences, libraryFolder: libraryFolder).tabItem { Label("Listen", systemImage: "headphones") }
         }
         .ayuTheme()
     }
@@ -173,7 +179,7 @@ private struct AnthropicSettingsView: View {
     }
 }
 
-/// Kindle delivery: addresses and SMTP server (UserDefaults), SMTP password and OpenRouter key (Keychain).
+/// Kindle delivery: addresses and SMTP server (UserDefaults) and SMTP password (Keychain).
 private struct KindleSettingsView: View {
     @Bindable var kindle: KindleController
 
@@ -203,12 +209,11 @@ private struct KindleSettingsView: View {
                           save: kindle.savePassword, remove: kindle.removePassword)
             }
             Section {
-                SecretRow(label: "OpenRouter key", prompt: "sk-or-…", stored: kindle.hasOpenRouterKey,
-                          save: kindle.saveOpenRouterKey, remove: kindle.removeOpenRouterKey)
+                LabeledContent("OpenRouter key", value: OpenRouterAccount.shared.hasKey ? "Set" : "Not set")
             } header: {
                 Text("Cover art")
             } footer: {
-                Text("Optional. Without a key, or if image generation fails, a plain cover is used.")
+                Text("Optional. Uses the key in Settings > OpenRouter. Without one, or if image generation fails, a plain cover is used.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -282,5 +287,183 @@ private struct SecretRow: View {
 
     private func run(_ f: () throws -> Void) {
         do { try f(); error = nil } catch { self.error = "Keychain error: \(error.localizedDescription)" }
+    }
+}
+
+/// The one OpenRouter key: Kindle cover art and Listen.
+private struct OpenRouterSettingsView: View {
+    let account: OpenRouterAccount
+
+    var body: some View {
+        Form {
+            Section {
+                SecretRow(label: "API key", prompt: "sk-or-…", stored: account.hasKey, save: account.save, remove: account.remove)
+            } header: {
+                Text("OpenRouter")
+            } footer: {
+                Text("Used for Listen (text to speech) and Kindle cover art. Stored only in your Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Listen: speech model and voice, and the pronunciation map.
+private struct ListenSettingsView: View {
+    @Bindable var preferences: Preferences
+    let libraryFolder: URL?
+
+    private var voices: [String] {
+        NarrationSettings.voicesByModel.first { $0.model == preferences.narration.model }?.voices ?? []
+    }
+
+    var body: some View {
+        let n = preferences.narration
+        Form {
+            Section {
+                Picker("Model", selection: Binding(get: { n.model }, set: { m in
+                    preferences.narration = NarrationSettings(model: m, voice: NarrationSettings.defaultVoice(for: m))
+                })) {
+                    ForEach(NarrationSettings.voicesByModel, id: \.model) { Text($0.name).tag($0.model) }
+                    if !NarrationSettings.voicesByModel.contains(where: { $0.model == n.model }) { Text(n.model).tag(n.model) }
+                }
+                Picker("Voice", selection: $preferences.narration.voice) {
+                    ForEach(voices, id: \.self) { Text($0.components(separatedBy: ":").first ?? $0).tag($0) }
+                    if !voices.contains(n.voice) { Text(n.voice).tag(n.voice) }
+                }
+                TextField("Voice ID", text: $preferences.narration.voice)
+                    .font(.body.monospaced())
+            } header: {
+                Text("Voice")
+            } footer: {
+                Text("Any OpenRouter speech voice ID can be typed in. Changing the voice re-narrates articles as you listen to them.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                if let libraryFolder {
+                    PronunciationEditor(store: PronunciationStore(libraryFolder: libraryFolder), settings: n)
+                } else {
+                    Text("Choose a library folder first.").foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Pronunciations")
+            } footer: {
+                Text("Whole words, any case. Saved as pronunciations.yml in the library (readcast's format), so it syncs. "
+                     + "Built-in entries are greyed out; overriding one copies it to your list.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 560, height: 620)
+    }
+}
+
+/// Written → Spoken table over the user's pronunciations.yml, with the bundled entries shown greyed out.
+private struct PronunciationEditor: View {
+    let store: PronunciationStore
+    let settings: NarrationSettings
+
+    struct Row: Identifiable, Equatable { let id = UUID(); var written: String; var spoken: String }
+
+    @State private var rows: [Row] = []
+    @State private var search = ""
+    @State private var loaded = false
+    @State private var error: String?
+    @State private var previewing: UUID?
+    @State private var audio: AVAudioPlayer?
+
+    private var userKeys: Set<String> { Set(rows.map { $0.written.lowercased() }) }
+    private func matches(_ w: String, _ s: String) -> Bool {
+        search.isEmpty || w.localizedCaseInsensitiveContains(search) || s.localizedCaseInsensitiveContains(search)
+    }
+    private var bundled: [(String, String)] {
+        PronunciationStore.bundled.filter { !userKeys.contains($0.key.lowercased()) && matches($0.key, $0.value) }
+            .sorted { $0.key.lowercased() < $1.key.lowercased() }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                TextField("Search", text: $search, prompt: Text("Search pronunciations"))
+                Button { rows.insert(Row(written: "", spoken: ""), at: 0); search = "" } label: { Label("Add", systemImage: "plus") }
+            }
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                GridRow {
+                    Text("Written").font(.caption).foregroundStyle(.secondary)
+                    Text("Spoken").font(.caption).foregroundStyle(.secondary)
+                    Color.clear.frame(width: 1, height: 1)
+                }
+                ForEach($rows) { $row in
+                    if matches(row.written, row.spoken) || row.written.isEmpty {
+                        GridRow {
+                            TextField("Written", text: $row.written, prompt: Text("beehiiv")).labelsHidden()
+                            TextField("Spoken", text: $row.spoken, prompt: Text("beehive")).labelsHidden()
+                            HStack(spacing: 4) {
+                                previewButton(row.id, row.spoken)
+                                Button { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.borderless).help("Remove")
+                            }
+                        }
+                    }
+                }
+                ForEach(bundled, id: \.0) { w, s in
+                    GridRow {
+                        Text(w).foregroundStyle(.tertiary)
+                        Text(s).foregroundStyle(.tertiary)
+                        HStack(spacing: 4) {
+                            previewButton(nil, s)
+                            Button("Override") { rows.insert(Row(written: w, spoken: s), at: 0) }
+                                .buttonStyle(.borderless).font(.caption)
+                        }
+                    }
+                }
+            }
+            if let error { Text(error).foregroundStyle(Ayu.red).font(.caption) }
+        }
+        .onAppear {
+            guard !loaded else { return }
+            rows = store.load().sorted { $0.key.lowercased() < $1.key.lowercased() }.map { Row(written: $0.key, spoken: $0.value) }
+            loaded = true
+        }
+        .onChange(of: rows) { save() }
+    }
+
+    private func previewButton(_ id: UUID?, _ spoken: String) -> some View {
+        Button { preview(id, spoken) } label: {
+            if previewing == id && previewing != nil { ProgressView().controlSize(.mini) } else { Image(systemName: "play.circle") }
+        }
+        .buttonStyle(.borderless)
+        .disabled(spoken.trimmingCharacters(in: .whitespaces).isEmpty || !OpenRouterAccount.shared.hasKey)
+        .help(OpenRouterAccount.shared.hasKey ? "Hear it in the current voice" : "Add an OpenRouter key to preview")
+    }
+
+    private func preview(_ id: UUID?, _ spoken: String) {
+        previewing = id ?? UUID()
+        Task {
+            defer { previewing = nil }
+            do {
+                let data = try await previewSpeech(spoken, settings: settings, keys: OpenRouterAccount.shared.keys)
+                audio = try AVAudioPlayer(data: data)
+                audio?.play()
+                error = nil
+            } catch {
+                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+    }
+
+    /// Complete rows only; the last spelling of a repeated word wins.
+    private func save() {
+        var entries: [String: String] = [:]
+        for r in rows {
+            let w = r.written.trimmingCharacters(in: .whitespaces), s = r.spoken.trimmingCharacters(in: .whitespaces)
+            if !w.isEmpty && !s.isEmpty { entries[w] = s }
+        }
+        guard entries != store.load() else { return }
+        do { try store.save(entries); error = nil } catch { self.error = "Could not save pronunciations.yml: \(error.localizedDescription)" }
     }
 }

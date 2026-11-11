@@ -8,6 +8,34 @@ public struct TimedWord: Equatable, Sendable {
     public init(start: TimeInterval, text: String) { self.start = start; self.text = text }
 }
 
+/// Collects a recogniser's successive results into one transcript. `SFSpeechRecognizer` splits long audio at pauses into
+/// utterances, and later results carry only the latest utterance (with timestamps from the start of the file). Keeping only
+/// the final result loses everything before the last pause.
+public struct UtteranceMerger: Sendable {
+    private var utterances: [[TimedWord]] = []
+    public init() {}
+
+    /// One callback's words. A result starting where the latest utterance starts refines it; one starting later is a new
+    /// utterance; one starting earlier (a recogniser that re-sends everything) replaces what it covers.
+    public mutating func add(_ words: [TimedWord]) {
+        guard let first = words.first else { return }
+        // Partial results can arrive before timing is known (all zero); wait for timed ones.
+        if words.count > 1, words.allSatisfy({ $0.start == 0 }) { return }
+        let tolerance = 0.3
+        guard let last = utterances.last, let lastStart = last.first?.start else { utterances = [words]; return }
+        if abs(first.start - lastStart) < tolerance {
+            utterances[utterances.count - 1] = words
+        } else if first.start > lastStart {
+            utterances.append(words)
+        } else {
+            utterances.removeAll { ($0.first?.start ?? 0) >= first.start - tolerance }
+            utterances.append(words)
+        }
+    }
+
+    public var words: [TimedWord] { utterances.flatMap { $0 } }
+}
+
 /// Turns a local audio file into timed words. The production implementation is `AppleSpeechTranscriber`;
 /// tests use stubs. `progress` is called with 0...1 (best effort).
 public protocol Transcriber {

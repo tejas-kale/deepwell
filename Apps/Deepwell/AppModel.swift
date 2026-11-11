@@ -13,6 +13,7 @@ final class AppModel {
     enum Phase { case needsFolder, ready(URL) }
 
     private(set) var phase: Phase
+    var libraryFolder: URL? { if case .ready(let url) = phase { url } else { nil } }
     private(set) var recentSaves: [URL] = []
     var errorMessage: String?
 

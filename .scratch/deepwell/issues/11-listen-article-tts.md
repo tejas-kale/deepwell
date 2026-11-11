@@ -4,7 +4,7 @@
 
 **Blocked by:** 02, 08
 
-**Status:** ready-for-agent
+**Status:** done (unverified in the running app; see docs/narration.md)
 
 ## Problem Statement
 
