@@ -49,6 +49,11 @@ Each run:
   and embeds a provisioning profile;
 - runs `altool --validate-app`, then `altool --upload-app`, and records the build number in `build/release/uploaded`.
 
+Signing (archive and export) uses the Apple ID signed in to Xcode > Settings > Accounts, the team's Account Holder.
+That account may use Apple's cloud-managed distribution certificates, so none are needed in your Keychain. The API
+key is used only to validate and upload. An App Manager key cannot use cloud signing; passing it to `xcodebuild`
+fails with "Cloud signing permission error".
+
 Without `ASC_KEY_ID`/`ASC_ISSUER_ID` the script stops before changing anything and says what is missing. A failed
 run is safe to re-run. It only skips a build number, and `--keep-build` refuses a number that was already uploaded.
 Bump `MARKETING_VERSION` by hand for a user-visible version change.

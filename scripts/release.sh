@@ -65,11 +65,8 @@ if [[ $EXPORT_ONLY == 0 ]]; then
   fi
   chmod 600 "$KEYFILE"
   grep -q 'BEGIN PRIVATE KEY' "$KEYFILE" || die "the API key for $ASC_KEY_ID does not look like a .p8 private key"
-  AUTH_XCODEBUILD=(-authenticationKeyPath "$KEYFILE" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
   AUTH_ALTOOL=(--api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID")
   export API_PRIVATE_KEYS_DIR="$KEYDIR"
-else
-  AUTH_XCODEBUILD=()   # export-only: provisioning goes through the Apple ID signed in to Xcode
 fi
 
 # --- Build number -------------------------------------------------------------------------------------------
@@ -97,7 +94,7 @@ echo "==> Archiving (Release)"
 # least one registered Mac. `archive` does not register one, a Debug `build` does: see "One-time setup" in docs/install.md.
 if ! xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -configuration Release \
   -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
-  -allowProvisioningUpdates ${AUTH_XCODEBUILD[@]+"${AUTH_XCODEBUILD[@]}"} \
+  -allowProvisioningUpdates \
   DEVELOPMENT_TEAM="$TEAM" archive -quiet; then
   die "archive failed. If it says \"Your team has no devices\", register this Mac once with:
        xcodebuild -project Deepwell.xcodeproj -scheme Deepwell -destination 'platform=macOS' \\
@@ -121,9 +118,13 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
 PLIST
 
 echo "==> Exporting for App Store Connect"
+# Signing goes through the Apple ID signed in to Xcode (Account Holder), which may use Apple's cloud-managed
+# distribution certificates. The API key is deliberately not passed here: an App Manager key may not use cloud
+# signing ("Cloud signing permission error"). The key is used only by altool below.
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$OUT/ExportOptions.plist" \
-  -allowProvisioningUpdates ${AUTH_XCODEBUILD[@]+"${AUTH_XCODEBUILD[@]}"} -quiet
+  -allowProvisioningUpdates -quiet \
+  || die "export failed. Check Xcode > Settings > Accounts is signed in to the $TEAM Account Holder, then re-run with --keep-build."
 PKG=$(ls "$EXPORT"/*.pkg 2>/dev/null | head -1)
 [[ -n "$PKG" ]] || die "export produced no .pkg in $EXPORT"
 
