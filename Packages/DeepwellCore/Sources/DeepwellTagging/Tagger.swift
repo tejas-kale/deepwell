@@ -1,4 +1,5 @@
 import Foundation
+import DeepwellModel
 
 public struct TagResult: Equatable, Sendable {
     /// Final tags for the item (1-4), vocabulary spelling where one matched.
@@ -23,10 +24,7 @@ public struct Tagger: Sendable {
     }
 
     /// Canonical comparison form: lowercase, runs of space/underscore/hyphen become one hyphen.
-    public static func canonical(_ tag: String) -> String {
-        let parts = tag.lowercased().split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" || $0 == "\n" || $0 == "\t" })
-        return parts.joined(separator: "-")
-    }
+    public static func canonical(_ tag: String) -> String { TagName.canonical(tag) }
 
     static func resolve(_ raw: [String], vocabulary: [String]) throws -> TagResult {
         var byCanonical: [String: String] = [:]

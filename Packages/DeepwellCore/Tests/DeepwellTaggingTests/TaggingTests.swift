@@ -265,3 +265,31 @@ final class NewTagFlagTests: XCTestCase {
         XCTAssertTrue(cleared.extraFrontmatter.isEmpty)
     }
 }
+
+/// Ticket 19: the prompt's tag list and the model's suggestions go through the tag-ops log.
+extension TaggingServiceTests {
+    func testVocabularyAndSuggestionsAreReplayedThroughTagOps() async throws {
+        try write("Stale copy", tags: ["ml", "draft"])
+        try write("Curated", tags: ["machine-learning"])
+        let url = try write("New")
+        let log = TagOpsLog(library: dir)
+        try log.append(TagOp(device: "Mac", op: .rename, from: "ml", to: "machine-learning"))
+        try log.append(TagOp(device: "iPhone", op: .delete, from: "draft"))
+        let stub = StubModel(.success(["ML", "draft", "wasm"]))
+        let summary = await service(stub).processPending()
+        XCTAssertEqual(summary.tagged.count, 1)
+        XCTAssertEqual(stub.calls[0].usage, [TagUsage(name: "machine-learning", count: 2)])
+        let item = try read(url)
+        XCTAssertEqual(item.tags, ["machine-learning", "wasm"])
+        XCTAssertEqual(NewTagFlag.read(item), ["wasm"])
+    }
+
+    func testSuggestionsThatAreAllDeletedCountAsAFailure() async throws {
+        let url = try write("New")
+        try TagOpsLog(library: dir).append(TagOp(device: "Mac", op: .delete, from: "draft"))
+        let summary = await service(StubModel(.success(["Draft"]))).processPending()
+        XCTAssertEqual(summary.tagged, [])
+        XCTAssertEqual(summary.failed, 1)
+        XCTAssertEqual(try read(url).tags, [])
+    }
+}

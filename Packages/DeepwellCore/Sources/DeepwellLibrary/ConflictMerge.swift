@@ -6,13 +6,17 @@ import DeepwellModel
 /// - every field not listed below, and the body, come from `current`;
 /// - status: the most advanced wins (done > reading > unread);
 /// - progress: the highest wins;
-/// - tags: the union, `current`'s order first, compared case-insensitively. Once ticket 19's `tag-ops.jsonl` exists,
-///   each version's tags are replayed through it before this merge, so a stale copy can't bring back a removed tag;
+/// - tags: each version's tags (and `new_tags` flags) are first replayed through the tag-ops log (`TagOps`, ticket 19),
+///   so a stale copy can't bring back a renamed, merged or deleted tag; then the union, `current`'s order first,
+///   compared with `TagName.canonical`;
 /// - extra frontmatter keys (`needs_transcript`, `new_tags`, ...): the union by key, `current`'s value winning.
 ///   So `needs_transcript: true` survives if any version still has it; at worst a transcript is made again.
 public enum ConflictMerge {
-    public static func merge(current: Item, others: [Item]) -> Item {
+    public static func merge(current: Item, others: [Item], ops: TagOps = TagOps()) -> Item {
         var out = current
+        var others = others
+        ops.apply(to: &out)
+        for i in others.indices { ops.apply(to: &others[i]) }
         for o in others {
             if rank(o.status) > rank(out.status) { out.status = o.status }
             out.progress = max(out.progress, o.progress)
@@ -35,7 +39,7 @@ public enum ConflictMerge {
         switch s { case .unread: 0; case .reading: 1; case .done: 2 }
     }
 
-    private static func fold(_ tag: String) -> String { tag.trimmingCharacters(in: .whitespaces).lowercased() }
+    private static func fold(_ tag: String) -> String { TagName.canonical(tag) }
 
     /// Groups extra frontmatter into one block per key: the key line and its continuation lines.
     private static func blocks(_ lines: [String]) -> [(key: String, lines: [String])] {
@@ -63,12 +67,26 @@ public enum ConflictResolver {
         public var rewrote = false
     }
 
-    /// Resolves the conflicts of the item file at `url`, if any. Unreadable versions are dropped (their content is lost
-    /// to the merge but the current file is kept intact).
+    /// Resolves the conflicts of the item file at `url`, if any, replaying `tagOps` (the library's tag-ops log) over
+    /// every version first. Unreadable versions are dropped (their content is lost to the merge but the current file
+    /// is kept intact). The tag-ops log itself is merged as the union of its lines (`TagOpsLog.mergedLines`).
     @discardableResult
-    public static func resolve(_ url: URL) throws -> Outcome {
+    public static func resolve(_ url: URL, tagOps: TagOps = TagOps()) throws -> Outcome {
         var outcome = Outcome()
         guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url), !versions.isEmpty else { return outcome }
+        // Two devices appended while apart: keep every op from every version.
+        if TagOpsLog.isLog(url) {
+            let others = versions.compactMap { try? Data(contentsOf: $0.url) }
+            try CoordinatedFile.coordinateWriting(url) { u in
+                let current = (try? Data(contentsOf: u)) ?? Data()
+                let merged = TagOpsLog.mergedLines([current] + others)
+                if merged != current { try merged.write(to: u, options: .atomic); outcome.rewrote = true }
+                for v in versions { v.isResolved = true }
+                try NSFileVersion.removeOtherVersionsOfItem(at: u)
+            }
+            outcome.versionsMerged = others.count
+            return outcome
+        }
         // Not an item (an issue's `.pending.json` marker, ticket 20): nothing to merge, the current version wins.
         // For a marker that means whichever claim iCloud kept; the loser sees it on its next pass and backs off.
         guard url.pathExtension.lowercased() == "md" else {
@@ -85,7 +103,7 @@ public enum ConflictResolver {
         }
         try CoordinatedFile.update(url) { text in
             var doc = try FrontmatterCodec.decode(text)
-            let merged = ConflictMerge.merge(current: doc.item, others: others)
+            let merged = ConflictMerge.merge(current: doc.item, others: others, ops: tagOps)
             outcome.versionsMerged = others.count
             guard merged != doc.item else { return nil }
             doc.item = merged

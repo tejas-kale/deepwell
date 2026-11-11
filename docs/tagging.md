@@ -92,6 +92,14 @@ phone tagging end to end after a phone capture (reachable since ticket 18; not y
 
 ## Verified vs not
 
+**Tag-ops replay (ticket 19).** `TaggingService.scan` loads `<library>/.deepwell/tag-ops.jsonl` and replays each
+item's tags through it before counting the vocabulary, so the prompt never offers a renamed, merged or deleted tag.
+The model's suggestions are replayed too (`TaggingService.replay`): "ML" after a rename to "machine-learning" is
+written as "machine-learning", and a deleted tag is dropped. If every suggestion was deleted, the pass counts a
+`noTags` failure (per-file back-off), so the tagger and the indexer's healing can't loop. Both apps go through this
+(the phone through `PhoneTagger`). `Tagger.canonical` now forwards to `TagName.canonical` in DeepwellModel, and
+`NewTagFlag` moved to DeepwellModel, so DeepwellLibrary (`TagOps`, `ConflictMerge`) can use both.
+
 Verified: `swift test` (stubbed model and transport: vocabulary reuse vs new, request shape, error handling, backoff and retry, frontmatter round-trip), unsigned `xcodebuild build`.
 Not verified: any real Anthropic call (the response format and model id are untested against the live API), real Keychain behaviour (no test touches it; sandboxed unsigned/personal-team builds may behave differently), the Settings UI, the app's network entitlement at runtime.
 Known limits: a concurrent edit between the final re-read and the write (milliseconds) could be lost; only top-level `*.md` files in the library are scanned.

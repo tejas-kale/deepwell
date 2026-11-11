@@ -7,7 +7,7 @@ import DeepwellLibrary
 ///   every item), and files with unresolved conflicts are handed to `onConflicts`.
 /// - In the local fallback (or a fixed folder): FSEvents (`FolderWatcher`) on macOS.
 /// `onChange` runs on a background queue after a burst settles; `onConflicts` runs on a background queue too.
-/// `onSharedStateChange` (container only) fires, on the main queue, when a file in `<library>/.deepwell/` (`menu.json`)
+/// `onSharedStateChange` (container only) fires, on the main queue, when a file in `<library>/.deepwell/` (`menu.json`, `tag-ops.jsonl`)
 /// is added or changes; an evicted one is asked to download first. The iOS app refreshes Current Focus from it.
 public final class LibraryWatcher: @unchecked Sendable {
     private var query: NSMetadataQuery?
@@ -74,6 +74,9 @@ public final class LibraryWatcher: @unchecked Sendable {
             let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             if Self.isSharedState(url) {
                 if status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded { toDownload.append(url) }
+                // tag-ops.jsonl appended on two devices while apart: ConflictResolver keeps every line.
+                if TagOpsLog.isLog(url),
+                   (item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool) == true { conflicted.append(url) }
                 sharedStateChanged = true
                 continue
             }
@@ -97,7 +100,7 @@ public final class LibraryWatcher: @unchecked Sendable {
         if sharedStateChanged, let onSharedStateChange { onSharedStateChange() }
     }
 
-    /// A file directly in the library's `.deepwell/` folder (`menu.json`, later `tag-ops.jsonl`).
+    /// A file directly in the library's `.deepwell/` folder (`menu.json`, `tag-ops.jsonl`).
     static func isSharedState(_ url: URL) -> Bool {
         url.deletingLastPathComponent().lastPathComponent == ".deepwell" && !url.lastPathComponent.hasPrefix(".")
     }

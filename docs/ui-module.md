@@ -19,6 +19,7 @@ to 6.2 would also switch every target to the Swift 6 language mode.
 | `Apps/Deepwell/TagsView.swift` | `TagsView.swift` | `TagsView(model:)`, `TagsModel` protocol |
 | `DeepwellTranscription/TranscriptionStatusView.swift` | `TranscriptionStatusView.swift` | `TranscriptionStatusView` (not used by the app yet) |
 | `Apps/Deepwell/PodcastPlayerView.swift` (ticket 15) | `PodcastPlayerView.swift` | `PodcastPlayerView(document:)`; timestamps use `linkButtonStyle()` |
+| `ItemRow`, `StatusBadge`, `FlowLayout` (were in `Apps/Deepwell/LibraryView.swift`, ticket 19) | `ItemRow.swift` | `ItemRow(entry:typeSymbol:)` (each app passes its own type symbol), `StatusBadge(status:)`, `FlowLayout(spacing:)` |
 
 Everything else is `internal`. `NarrationMark`, `BlockView`, `SpokenWordYKey`, `readerContentSpace`, `linkButtonStyle()` and
 `YouTubeEmbedView` are only used inside the module.
@@ -48,6 +49,7 @@ Settings, `Preferences`, `IssueReaderView` (PDFKit/WebKit `NSViewRepresentable`)
 | `View.linkButtonStyle()` | `.buttonStyle(.link)` | `.buttonStyle(.borderless)` (`.link` does not exist on iOS) |
 | `ArticleHeader` open | `openInSafari` (NSWorkspace, Safari specifically) | `@Environment(\.openURL)` |
 | `ArticleHeader` hover | pointing-hand `NSCursor` on the title | none |
+| `TagsView` (ticket 19) | `.frame(minWidth: 420, minHeight: 420)`; actions in the context menu | no minimum frame (it is a sheet on the phone); context menu (long press) plus swipe actions: Rename/Accept leading, Delete trailing |
 | `NativeScroller` / `ScrollViewFinder` | finds the `NSScrollView`, eased scroll for narration follow, live-scroll detection | **stub**: `scroll(by:)` does nothing and no user-scroll callback fires. Restore and progress still work; following the spoken word is for ticket 17 |
 | `YouTubeEmbedView` | `NSViewRepresentable` around `WKWebView` | `UIViewRepresentable`, plus `allowsInlineMediaPlayback` |
 

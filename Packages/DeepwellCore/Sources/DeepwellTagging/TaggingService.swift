@@ -85,7 +85,8 @@ public actor TaggingService {
         for c in scan.pending {
             if let a = attempts[c.item.id], a.next > now() { summary.skippedBackoff += 1; continue }
             do {
-                let result = try await tagger.tag(title: c.item.title, text: c.body, vocabulary: vocabulary, librarySize: scan.librarySize)
+                let raw = try await tagger.tag(title: c.item.title, text: c.body, vocabulary: vocabulary, librarySize: scan.librarySize)
+                let result = try Self.replay(raw, ops: scan.ops)
                 let written = try library.withAccess { _ in try Self.apply(result, to: c.url, scope: scope) }
                 if written { summary.tagged.append(c.item.id) }
                 // Written, or tagged elsewhere meanwhile (apply re-reads the file): either way, done here.
@@ -148,6 +149,7 @@ public actor TaggingService {
         var vocabulary: [TagUsage] = []
         var librarySize = 0
         var settled: [String] = []
+        var ops = TagOps()
     }
 
     /// Pending: no tags, or no summary (items tagged before summaries existed are re-tagged once, replacing
@@ -157,6 +159,9 @@ public actor TaggingService {
 
     static func scan(_ folder: URL, scope: TaggingScope = .wholeLibrary) -> Scan {
         var s = Scan(), indexByCanonical: [String: Int] = [:]
+        // Ticket 19: the vocabulary offered to the model never includes a renamed, merged or deleted tag.
+        let ops = TagOpsLog(library: folder).load()
+        s.ops = ops
         let files = markdownFiles(in: folder)
         if let names = scope.fileNames {
             // A scoped file that is gone (deleted, renamed) will never need tagging here.
@@ -170,13 +175,25 @@ public actor TaggingService {
             if inScope, scope.fileNames != nil { s.settled.append(url.lastPathComponent) }
             // Vocabulary: summarised items only, whatever the scope (an out-of-scope untagged item adds nothing).
             if needsTagging(doc.item) { continue }
-            for t in Set(doc.item.tags) {
+            for t in Set(ops.apply(to: doc.item.tags)) {
                 let c = Tagger.canonical(t)
                 if let i = indexByCanonical[c] { s.vocabulary[i].count += 1 }
                 else { indexByCanonical[c] = s.vocabulary.count; s.vocabulary.append(TagUsage(name: t, count: 1)) }
             }
         }
         return s
+    }
+
+    /// Ticket 19: the model may still suggest a tag the user renamed, merged or deleted; map it the same way. If nothing
+    /// is left (every suggestion was deleted), it is a `noTags` failure, so the per-file back-off applies instead of the
+    /// indexer stripping the tags again after every pass.
+    static func replay(_ result: TagResult, ops: TagOps) throws -> TagResult {
+        guard !ops.isEmpty else { return result }
+        var out = result
+        out.tags = ops.apply(to: result.tags)
+        guard !out.tags.isEmpty else { throw TaggingError.noTags }
+        out.newTags = result.newTags.filter { out.tags.contains($0) }
+        return out
     }
 
     /// Re-reads the file (it may have changed during the API call) and writes only if it still needs tagging.

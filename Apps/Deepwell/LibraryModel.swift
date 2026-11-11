@@ -68,9 +68,11 @@ final class LibraryModel {
             Task { @MainActor in self?.scheduleSync(); onLibraryChange() }
         }, onConflicts: { [weak self] urls in
             // Already on a background queue: merge each item's conflict versions into the current file.
+            // Ticket 19: each version's tags are replayed through the tag-ops log first.
             var failures: [String] = []
+            let ops = TagOpsLog(library: location.url).load()
             for url in urls {
-                do { try ConflictResolver.resolve(url) } catch { failures.append(url.lastPathComponent) }
+                do { try ConflictResolver.resolve(url, tagOps: ops) } catch { failures.append(url.lastPathComponent) }
             }
             Task { @MainActor in
                 if !failures.isEmpty { self?.errorMessage = "Could not merge iCloud conflicts in: \(failures.joined(separator: ", "))" }
@@ -99,7 +101,8 @@ final class LibraryModel {
         }
     }
 
-    func makeCurator() -> TagCurator? { index.map { TagCurator(root: folder, index: $0) } }
+    /// Ops are recorded in `.deepwell/tag-ops.jsonl` under this Mac's name (ticket 19).
+    func makeCurator() -> TagCurator? { index.map { TagCurator(root: folder, index: $0, device: SharedConfig.deviceName) } }
 
     func reportCuration(_ result: CurationResult) {
         errorMessage = result.failed.isEmpty ? nil

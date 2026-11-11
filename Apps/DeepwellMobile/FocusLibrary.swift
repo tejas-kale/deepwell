@@ -5,6 +5,8 @@ import DeepwellLibrary
 import DeepwellIndex
 import DeepwellMenu
 import DeepwellMagazines
+import DeepwellCuration
+import DeepwellUI
 
 /// The phone's view of the library: the per-device SQLite index (Application Support, built from the container and
 /// kept current by `LibraryWatcher`'s NSMetadataQuery) and the Mac's pick from `.deepwell/menu.json` (read only).
@@ -18,6 +20,15 @@ final class FocusLibrary {
     private(set) var focus: CurrentFocus?
     /// Items being read (status `reading`), newest capture first.
     private(set) var inProgress: [IndexedItem] = []
+    /// Items not started (status `unread`), newest capture first: the Reading tab's "Unread" section.
+    private(set) var unread: [IndexedItem] = []
+
+    // Library tab (ticket 19): the whole index, filtered and searched like the Mac's list.
+    /// Full-text search over the per-device index (title, author, tags, body); empty lists everything.
+    var searchText = "" { didSet { if searchText != oldValue { reloadLibrary() } } }
+    var filter = ItemFilter() { didSet { if filter != oldValue { reloadLibrary() } } }
+    private(set) var libraryItems: [IndexedItem] = []
+    private(set) var tagSummaries: [TagSummary] = []
     private(set) var errorMessage: String?
     /// True until the first index sync after launch has finished: rows for items not indexed yet say "Loading".
     private(set) var isIndexing = true
@@ -54,9 +65,11 @@ final class FocusLibrary {
             Task { @MainActor in self?.scheduleSync() }
         }, onConflicts: { [weak self] urls in
             // Background queue: merge each item's iCloud conflict versions into the current file (ticket 13's rules).
+            // Ticket 19: each version's tags are replayed through the tag-ops log first.
             var failures: [String] = []
+            let ops = TagOpsLog(library: location.url).load()
             for url in urls {
-                do { try ConflictResolver.resolve(url) } catch { failures.append(url.lastPathComponent) }
+                do { try ConflictResolver.resolve(url, tagOps: ops) } catch { failures.append(url.lastPathComponent) }
             }
             Task { @MainActor in
                 if !failures.isEmpty { self?.errorMessage = "Could not merge iCloud conflicts in: \(failures.joined(separator: ", "))" }
@@ -141,10 +154,46 @@ final class FocusLibrary {
             allItems = list.map(\.item)
             byID = Dictionary(list.map { ($0.item.id, $0) }, uniquingKeysWith: { a, _ in a })
             inProgress = list.filter { $0.item.status == .reading }
+            unread = list.filter { $0.item.status == .unread }
             focus = focus?.updating(items: allItems)
         } catch {
             errorMessage = "Query failed: \(error.localizedDescription)"
         }
+        reloadLibrary()
+    }
+
+    /// The Library tab's rows and the tag list, from the index (`search` lists everything for an empty query).
+    private func reloadLibrary() {
+        guard let index else { return }
+        do {
+            tagSummaries = try index.tagSummaries()
+            if let tag = filter.tag, !tagSummaries.contains(where: { $0.name == tag }) { filter.tag = nil; return }
+            libraryItems = try index.search(searchText, filter: filter)
+        } catch {
+            errorMessage = "Query failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+extension FocusLibrary: TagsModel {
+    /// Tag curation on the phone (ticket 19): `TagCurator` appends the op to `.deepwell/tag-ops.jsonl` under this
+    /// device's name, rewrites the affected files (coordinated) and refreshes their index rows.
+    func curate(_ action: (TagCurator) throws -> CurationResult) {
+        guard let index else { return }
+        do {
+            let result = try action(TagCurator(root: folder, index: index, device: SharedConfig.deviceName))
+            errorMessage = result.failed.isEmpty ? nil
+                : "\(result.failed.count) file(s) could not be updated: \(result.failed.keys.sorted().joined(separator: ", "))"
+        } catch {
+            errorMessage = "Tag change failed: \(error.localizedDescription)"
+        }
+        reloadItems()
+    }
+
+    /// "Show Items" in the tag list: the Library filtered to that tag.
+    func showItems(tagged tag: String) {
+        searchText = ""
+        filter = ItemFilter(tag: tag)
     }
 }
 

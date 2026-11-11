@@ -1,5 +1,4 @@
 import Foundation
-import DeepwellModel
 
 /// Persists the "new tag" flag in the item's frontmatter as `new_tags: ["a", "b"]`, so it survives an
 /// index rebuild from Markdown. It lists tags (a subset of `tags`) that auto-tagging introduced and the user

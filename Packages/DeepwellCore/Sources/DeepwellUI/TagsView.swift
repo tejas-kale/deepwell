@@ -2,7 +2,8 @@ import SwiftUI
 import DeepwellIndex
 import DeepwellCuration
 
-/// What the tag curation screen needs from the app's library model. The Mac's `LibraryModel` conforms.
+/// What the tag curation screen needs from the app's library model. The Mac's `LibraryModel` and the phone's
+/// `FocusLibrary` (ticket 19) conform.
 @MainActor
 public protocol TagsModel: AnyObject {
     var tagSummaries: [TagSummary] { get }
@@ -12,7 +13,9 @@ public protocol TagsModel: AnyObject {
     func showItems(tagged tag: String)
 }
 
-/// Tag curation screen: counts, new-tag flags, rename / merge / delete. All logic is in `TagCurator`.
+/// Tag curation screen: counts, new-tag flags, rename / merge / delete / accept. All logic is in `TagCurator`.
+/// Shown as a sheet on both platforms. Actions sit in each row's context menu (right-click on the Mac, long press on
+/// iOS); on iOS rows also swipe: Rename and Accept from the leading edge, Delete from the trailing edge.
 public struct TagsView<Model: TagsModel>: View {
     let model: Model
     @Environment(\.dismiss) private var dismiss
@@ -55,11 +58,24 @@ public struct TagsView<Model: TagsModel>: View {
                     Divider()
                     Button("Delete…", role: .destructive) { deleting = tag }
                 }
+                #if os(iOS)
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", role: .destructive) { deleting = tag }
+                }
+                .swipeActions(edge: .leading) {
+                    Button("Rename") { text = tag.name; renaming = tag }.tint(Ayu.blue)
+                    if tag.newCount > 0 {
+                        Button("Accept") { model.curate { try $0.acceptNew(tag.name) } }.tint(Ayu.green)
+                    }
+                }
+                #endif
             }
             .ayuSurface(Ayu.background)
         }
         .background(Ayu.panel)
+        #if os(macOS)
         .frame(minWidth: 420, minHeight: 420)
+        #endif
         .alert("Rename tag", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("New name", text: $text)
             Button("Rename") { if let t = renaming { model.curate { try $0.rename(t.name, to: text) } } }

@@ -4,15 +4,19 @@ import DeepwellModel
 import DeepwellIndex
 import DeepwellMenu
 
-/// What the iPad sidebar (and the iPhone tab bar) offers. Library browsing and search come with ticket 19.
+/// What the iPad sidebar (and the iPhone tab bar) offers. Library (browse, filter, search, tags) is ticket 19.
 enum MobileSection: String, Hashable, CaseIterable, Identifiable {
-    case focus, reading, settings
+    case focus, reading, library, settings
     var id: Self { self }
     var title: String {
-        switch self { case .focus: "Current Focus"; case .reading: "Reading"; case .settings: "Settings" }
+        switch self {
+        case .focus: "Current Focus"; case .reading: "Reading"; case .library: "Library"; case .settings: "Settings"
+        }
     }
     var symbol: String {
-        switch self { case .focus: "scope"; case .reading: "book"; case .settings: "gearshape" }
+        switch self {
+        case .focus: "scope"; case .reading: "book"; case .library: "books.vertical"; case .settings: "gearshape"
+        }
     }
 }
 
@@ -117,26 +121,30 @@ struct FocusQueueList: View {
     }
 }
 
-/// Items with status `reading`, so something started outside this week's pick is one tap away.
+/// What's left to read: magazine issues still splitting on the Mac, then items in progress (status `reading`), then
+/// unread items, each newest capture first. Done items aren't listed (the Library tab has everything); empty
+/// sections are left out.
 struct ReadingList: View {
     let library: FocusLibrary
     var selection: Binding<String?>?
 
     var body: some View {
         Group {
-            if library.inProgress.isEmpty && library.pendingIssues.isEmpty {
-                ContentUnavailableView("Nothing in progress", systemImage: "book",
-                                       description: Text("Items you've started reading show up here."))
+            if library.inProgress.isEmpty && library.unread.isEmpty && library.pendingIssues.isEmpty {
+                ContentUnavailableView("Nothing to read", systemImage: "book",
+                                       description: Text("Unread items and items you've started show up here."))
             } else if let selection {
                 List(selection: selection) {
                     pendingSection
-                    ForEach(library.inProgress, id: \.item.id) { row($0).tag($0.item.id) }
+                    itemSection("Reading", library.inProgress) { row($0).tag($0.item.id) }
+                    itemSection("Unread", library.unread) { row($0).tag($0.item.id) }
                 }
                 .ayuSurface(Ayu.panel)
             } else {
                 List {
                     pendingSection
-                    ForEach(library.inProgress, id: \.item.id) { e in NavigationLink(value: e.item.id) { row(e) } }
+                    itemSection("Reading", library.inProgress) { e in NavigationLink(value: e.item.id) { row(e) } }
+                    itemSection("Unread", library.unread) { e in NavigationLink(value: e.item.id) { row(e) } }
                 }
                 .ayuSurface(Ayu.panel)
             }
@@ -160,12 +168,21 @@ struct ReadingList: View {
         }
     }
 
+    @ViewBuilder
+    private func itemSection<Row: View>(_ title: String, _ items: [IndexedItem],
+                                        @ViewBuilder row: @escaping (IndexedItem) -> Row) -> some View {
+        if !items.isEmpty {
+            Section(title) { ForEach(items, id: \.item.id) { row($0) } }
+        }
+    }
+
+    /// Unread rows show no percentage.
     private func row(_ e: IndexedItem) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(e.item.title).font(.body.weight(.medium))
             HStack(spacing: 6) {
                 Image(systemName: e.item.type.symbol)
-                Text("\(Int(e.item.progress * 100))%")
+                if e.item.status == .reading { Text("\(Int(e.item.progress * 100))%") }
                 if let a = e.item.author { Text("· \(a)").lineLimit(1) }
             }
             .font(.caption).foregroundStyle(.secondary)

@@ -74,9 +74,12 @@ temp folders.
   creates `.deepwell/`. Reads and writes are coordinated.
 - First run: `MenuStore.adoptLegacy(from:)` moves `~/Library/Application Support/Deepwell/menu.json` there. It copies
   (coordinated), verifies, then deletes. If `.deepwell/menu.json` already exists it wins, and the old file is left untouched.
-- Ticket 19 adds `tag-ops.jsonl` here.
-- The indexer skips every dot-folder, `.deepwell/` included (`testSharedStateFolderIsNotIndexed`), and so does
-  the metadata watcher.
+- `<library>/.deepwell/tag-ops.jsonl` (ticket 19) is the tag curation log: one JSON op per line, append-only,
+  written by both apps (`TagOpsLog.append`, one coordinated write per op) and never compacted in v1. See
+  docs/tag-curation.md.
+- The indexer skips every dot-folder, `.deepwell/` included (`testSharedStateFolderIsNotIndexed`). The metadata
+  watcher reports `.deepwell/` changes through `onSharedStateChange`, downloads evicted files there, and hands
+  conflicts of `tag-ops.jsonl` to `ConflictResolver`.
 
 ## Changes and downloads
 
@@ -95,6 +98,7 @@ Kindle, narration) waits for either kind.
 Every write to an item file goes through `CoordinatedFile` (`NSFileCoordinator`, no file presenter):
 - `ItemFileWriter.write`: new captures, shared links, magazine articles. Coordinated `.forReplacing`.
 - `ItemFileUpdater.update`: reader progress and status. `TagCurator`: rename, merge, delete. `TaggingService.apply`.
+  `LibrarySync.heal`: a file whose tags the tag-ops log retired (ticket 19).
   These are read-modify-write inside **one** coordinated write (`.forMerging`), so an incoming sync can't land
   between the read and the write.
 - `FolderTranscriptionLibrary.save`: the transcript.
@@ -112,14 +116,21 @@ marks the versions resolved and removes them. The rules:
 - the **body**, and every field not listed here, come from the current file;
 - **status**: the most advanced wins (done > reading > unread), and done means progress 1;
 - **progress**: the highest wins;
-- **tags**: the union, in the current file's order first, compared case-insensitively. Once ticket 19's
-  `tag-ops.jsonl` exists, each version's tags are replayed through it first, so a stale copy can't bring a removed tag back;
+- **tags**: each version's tags (and `new_tags` flags) are first replayed through `tag-ops.jsonl`
+  (`ConflictMerge.merge(current:others:ops:)`; both apps load the log once per batch of conflicts), so a stale copy
+  can't bring back a renamed, merged or deleted tag. Then the union, in the current file's order first, compared with
+  `TagName.canonical` (case and separators ignored);
 - **extra frontmatter** (`needs_transcript`, `new_tags`, `summary`, …): the union by key (a key's continuation
   lines travel with it), and the current file's value wins. So `needs_transcript: true` survives if any version has
   it. The cost: if the current body is a stale placeholder, the item is transcribed again, but no transcript is lost
   for good.
 
-Tests: `ConflictMergeTests`. Real conflicts can't be produced on one machine, so the resolver's wiring needs the
+**The log's own conflicts.** Two devices appending while apart make conflict versions of `tag-ops.jsonl`.
+`ConflictResolver.resolve` keeps every distinct op (by id) from every version, sorted by time
+(`TagOpsLog.mergedLines`), then removes the versions. Replay order depends only on each op's `at` and `id`, so the
+merged log replays the same on both devices.
+
+Tests: `ConflictMergeTests`, `TagOpsTests` (stale versions, the log's union). Real conflicts can't be produced on one machine, so the resolver's wiring needs the
 two-device test.
 
 ## Manual checks (passed, confirmed by the user on 2026-11-11)

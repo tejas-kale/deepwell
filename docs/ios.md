@@ -43,11 +43,12 @@ FocusLibrary
   ├─ LibraryIndex  (Application Support/Deepwell/index.sqlite, per device, rebuilt from the .md files)
   ├─ LibrarySync   (scan; evicted files: download requested, row kept)
   ├─ LibraryWatcher (NSMetadataQuery): .md changes → sync; conflicts → ConflictResolver;
-  │                 .deepwell/ changes → re-read menu.json
+  │                 .deepwell/ changes → re-read menu.json (tag-ops.jsonl changes → a sync that heals files)
   ├─ SharedFilePresenter on menu.json (NSFilePresenter): a second "the Mac wrote a new pick" signal
   └─ CurrentFocus.load (DeepwellMenu): MenuStore.load() only, then QueueProgress over the index's items
 MobileRootView
-  ├─ compact width (iPhone, iPad Slide Over/narrow Split View): TabView, Current Focus and Reading, each a NavigationStack
+  ├─ compact width (iPhone, iPad Slide Over/narrow Split View): TabView, Current Focus, Reading, Library and Settings,
+  │  each a NavigationStack
   └─ regular width (iPad): NavigationSplitView, sidebar → queue → reader
 MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownBody, YouTubeTranscriptView, PodcastPlayerView
                  └─ ItemFileUpdater.setProgress / setStatus (coordinated read-modify-write)
@@ -86,7 +87,7 @@ MobileReaderView ── DeepwellUI: ScrollProgressView, ArticleHeader, MarkdownB
 | DeepwellLibrary | `LibraryFolderStore.resolveContainer()` (new), `ConflictResolver`, `CoordinatedFile` (via the updater and `MenuStore`) | migration types unused |
 | DeepwellIndex | `LibraryIndex`, `LibrarySync`, `LibraryWatcher`, `ItemFileUpdater`, `ReadingState`, `ICloudPlaceholder` | `FolderWatcher` (FSEvents) is macOS-only and unused, since iOS is always in the container |
 | DeepwellMenu | `CurrentFocus` (new), `MenuStore.load`, `QueueProgress` | builder, validator, prompt and `MenuService` are linked but unused |
-| DeepwellUI | `ScrollProgressView`, `ArticleHeader`, `MarkdownBody`, `YouTubeTranscriptView`, `PodcastPlayerView` (moved from the Mac app in this ticket), `Ayu` | `NativeScroller` is still a stub on iOS (no narration follow) |
+| DeepwellUI | `ScrollProgressView`, `ArticleHeader`, `MarkdownBody`, `YouTubeTranscriptView`, `PodcastPlayerView` (moved from the Mac app in this ticket), `Ayu`; since ticket 19 `ItemRow` (with `StatusBadge`, `FlowLayout`) and `TagsView` | `NativeScroller` is still a stub on iOS (no narration follow) |
 
 Mac-only, kept in `Apps/Deepwell`: the reader shell's Listen and issue view, `IssueReaderView`, menu building and
 picking, Kindle, Settings, `PaneFocus`, the migration UI.
@@ -177,6 +178,25 @@ iCloud ────────────────────────�
 - **Device names** (`SharedConfig.deviceName`): "iPhone (3fa2c1)" / "<Mac name> (ab12cd)"; the short id is kept in each
   app's defaults so two Macs with the same name still tell their claims apart.
 - Tests: `HandOffTests` (9, DeepwellMagazines), `ClaimTests` (8, DeepwellTranscription), `IssueInboxTests` (1).
+
+## Library and tag curation (ticket 19)
+
+- **Library** (tab on the iPhone, sidebar row on the iPad, between Reading and Settings): `LibraryScreen` lists every
+  indexed item with the shared `ItemRow` (the Mac's row, moved into DeepwellUI), newest capture first. The toolbar's
+  filter menu sets `ItemFilter` (type, status, tag, new tags only), and a "Showing …" row with Clear sits above the
+  list while a filter is on. `.searchable` runs `LibraryIndex.search` (SQLite FTS over title, author, tags and body,
+  in this device's index), combined with the filter. Rows open the same reader as the other tabs. State lives in
+  `FocusLibrary` (`searchText`, `filter`, `libraryItems`, `tagSummaries`), refreshed after each sync and reader change.
+- **Tags** (toolbar button) opens the shared `TagsView` as a sheet. Long-press a tag for Show Items / Rename / Merge
+  Into / Accept / Delete; swipe left to delete, right to rename or accept. "Show Items" filters the Library to that
+  tag. `FocusLibrary` is a `TagsModel`: each action runs `TagCurator` with `SharedConfig.deviceName`, which appends
+  the op to `.deepwell/tag-ops.jsonl` and rewrites the affected files (coordinated). See docs/tag-curation.md.
+- **Reading** now lists what's left to read: "Magazine issues" (ticket 20, "Splitting on Mac"), then "Reading"
+  (status `reading`, with the percentage), then "Unread" (status `unread`, no percentage), each newest capture first.
+  Done items aren't listed, and empty sections are left out. "Nothing to read" shows only when all three are empty.
+  Opening an unread item and reading moves it to Reading (the reader writes status/progress; `itemChanged()` reloads).
+- The phone heals files from the tag-ops log like the Mac (`LibrarySync`), replays it in conflict merges, and its
+  tagging (`PhoneTagger` → `TaggingService`) uses the replayed tag list.
 
 ## Settings and tagging (ticket 16)
 
@@ -304,6 +324,32 @@ Not verified (needs a device, checklist):
    it (a YouTube item is picked up too, but YouTube audio is still a stub on the Mac, docs/transcription.md, so it
    fails there with the retryable "no audio" error, exactly as a Mac capture does);
 4. two Macs on the same library don't both split the same issue or transcribe the same item.
+
+## Verified for ticket 19 (2026-11-11)
+
+- `swift test`: 13 bundles, 269 tests, 0 failures (new: `TagOpsTests` 12, 4 in `CurationTests` for the log and
+  indexer healing in a temp library, 2 in `TaggingServiceTests` for the replayed vocabulary and suggestions). `npm test`
+  in `Extensions/SafariExtension`: 25 tests, 0 failures.
+- The Mac scheme, `-scheme DeepwellMobile` and `-scheme DeepwellUI` (iOS Simulator) build with `CODE_SIGNING_ALLOWED=NO`.
+- Mac 0.1.0 (8), now with this ticket's code: Xcode was signed in again, so `scripts/release.sh --keep-build` exported,
+  validated and uploaded it (delivery `3f7880b7-3348-488c-8f3a-f5b79be75a9c`), processed VALID. The archive's
+  entitlements (app and both extensions) are identical to the ticket 20 archive, i.e. to build 7.
+- iOS 0.1.0 (9): exported `.ipa` entitlements as for build 8 (the app: team NDMG62GXZA, iCloud container
+  Production/CloudDocuments, `group.com.tejaskale.deepwell`, `keychain-access-groups` `NDMG62GXZA.com.tejaskale.deepwell`;
+  each extension: team, own App ID, the iOS group only). Neither extension contains DeepwellPodcasts /
+  DeepwellTranscription / DeepwellMagazines symbols or links Speech, AVFoundation or PDFKit. No new privacy-sensitive
+  API. Uploaded (delivery `d4e3fe78-3a58-404b-b20d-adc6567dad9e`), processed VALID.
+
+Not verified (needs a device, checklist):
+
+1. Library tab (iPhone) / sidebar row (iPad): every item listed; search finds a word from an article's body; the
+   filter menu narrows by type, status, tag and "New Tags Only", and Clear resets it; a row opens the reader;
+2. Tags sheet on the phone: rename, merge into, delete and accept (long press and swipe); the Library and the Mac
+   show the change after a sync, and `.deepwell/tag-ops.jsonl` has one line per action;
+3. rename (or delete) a tag on one device while the other is offline with an item carrying it open; reconnect: the
+   old tag doesn't come back on either device, in the file or in the tag list;
+4. Reading tab on iPhone and iPad: Magazine issues, then Reading (with percentages), then Unread; opening an unread
+   item and scrolling moves it to Reading.
 
 ## Not verified
 

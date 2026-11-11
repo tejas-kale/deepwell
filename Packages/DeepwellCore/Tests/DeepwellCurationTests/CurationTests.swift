@@ -163,3 +163,74 @@ final class CurationTests: XCTestCase {
         XCTAssertEqual(try titles(ItemFilter(tag: "ios"), "rust"), [])
     }
 }
+
+/// Ticket 19: curation is logged in `.deepwell/tag-ops.jsonl`, and the indexer heals files from the log.
+extension CurationTests {
+    func testCurationAppendsOpsToTheLog() throws {
+        try add("A", tags: ["ml", "draft", "ios"])
+        try sync()
+        curator = TagCurator(root: dir, index: index, device: "Test Mac")
+        try curator.rename("ml", to: "Machine Learning")
+        try curator.merge("ios", into: "apple")
+        try curator.delete("draft")
+        try curator.acceptNew("apple")   // not a tag op
+        try curator.rename("apple", to: "apple")   // own spelling: not an op
+        let ops = TagOpsLog(library: dir).load().ops
+        XCTAssertEqual(ops.map(\.op), [.rename, .merge, .delete])
+        XCTAssertEqual(ops.map(\.from), ["ml", "ios", "draft"])
+        XCTAssertEqual(ops.map(\.to), ["machine-learning", "apple", nil])
+        XCTAssertEqual(Set(ops.map(\.device)), ["Test Mac"])
+    }
+
+    func testIndexerHealsAStaleCopyThatArrivesAfterCuration() throws {
+        let a = try add("A", tags: ["ml", "swift"], status: .unread, body: "Kept body")
+        try sync()
+        let staleText = try String(contentsOf: a, encoding: .utf8)
+        try curator.rename("ml", to: "machine-learning")
+        XCTAssertEqual(try fileTags(a), ["machine-learning", "swift"])
+
+        // iCloud delivers the other device's older copy (old tag, but it was being read there).
+        var stale = try FrontmatterCodec.decode(staleText)
+        stale.item.status = .reading
+        try FrontmatterCodec.encode(stale).write(to: a, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: a.path)
+
+        let report = try LibrarySync(root: dir, index: index, downloader: NoopDownloader()).sync()
+        XCTAssertEqual(report.healed, 1)
+        let healed = try fileDoc(a)
+        XCTAssertEqual(healed.item.tags, ["machine-learning", "swift"])
+        XCTAssertEqual(healed.item.status, .reading, "only tags are replayed")
+        XCTAssertEqual(healed.body, "Kept body")
+        XCTAssertEqual(try index.tagSummaries().map(\.name), ["machine-learning", "swift"])
+
+        // Nothing left to heal: the next pass skips the file.
+        let again = try LibrarySync(root: dir, index: index, downloader: NoopDownloader()).sync()
+        XCTAssertEqual(again.healed, 0)
+        XCTAssertEqual(again.skipped, 1)
+    }
+
+    func testIndexerHealsUnchangedFilesWhenAnOpArrivesFromAnotherDevice() throws {
+        let a = try add("A", tags: ["draft", "go"])
+        let b = try add("B", tags: ["go"])
+        try sync()
+        // The phone deleted "draft" but its file rewrite hasn't arrived here; only the log has.
+        try TagOpsLog(library: dir).append(TagOp(device: "iPhone", op: .delete, from: "draft"))
+        let report = try LibrarySync(root: dir, index: index, downloader: NoopDownloader()).sync()
+        XCTAssertEqual(report.healed, 1)
+        XCTAssertEqual(try fileTags(a), ["go"])
+        XCTAssertEqual(try fileTags(b), ["go"])
+        XCTAssertEqual(try index.tagSummaries().map(\.name), ["go"])
+    }
+
+    func testHealingIsIdempotentAcrossRebuilds() throws {
+        let a = try add("A", tags: ["a"])
+        let log = TagOpsLog(library: dir)
+        try log.append(TagOp(at: Date(timeIntervalSince1970: 1), device: "Mac", op: .rename, from: "a", to: "b"))
+        try log.append(TagOp(at: Date(timeIntervalSince1970: 2), device: "iPhone", op: .merge, from: "b", to: "c"))
+        try LibrarySync(root: dir, index: index, downloader: NoopDownloader()).rebuild()
+        XCTAssertEqual(try fileTags(a), ["c"])
+        let r = try LibrarySync(root: dir, index: index, downloader: NoopDownloader()).rebuild()
+        XCTAssertEqual(r.healed, 0)
+        XCTAssertEqual(try fileTags(a), ["c"])
+    }
+}
