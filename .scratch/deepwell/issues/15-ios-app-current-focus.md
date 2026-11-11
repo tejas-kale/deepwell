@@ -24,3 +24,6 @@
 - [ ] A new pick on the Mac appears on the phone without relaunching
 - [ ] iPad shows three columns; rotation and split view work
 - [ ] `docs/ios.md`: architecture, what is shared, and verified vs not
+
+Note: the iOS app icon is `Design/AppIcon/fullbleed-1024.png` as a single 1024 universal iOS entry in the mobile
+target's asset catalog (no mask baked in). See `Design/AppIcon/README.md`.
