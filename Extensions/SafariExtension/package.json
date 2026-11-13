@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "vendor": "cp node_modules/@mozilla/readability/Readability.js Resources/readability.js && cp node_modules/turndown/dist/turndown.js Resources/turndown.js && cp node_modules/turndown-plugin-gfm/dist/turndown-plugin-gfm.js Resources/turndown-plugin-gfm.js",
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "@mozilla/readability": "^0.6.0",
