@@ -67,14 +67,11 @@ public struct MarkdownBody: View {
     private func blockView(_ i: Int, _ block: ArticleBlock) -> some View {
         let mark = NarrationMark(overlay, block: i)
         return BlockView(block: block, mark: mark).equatable()
-            .background {
-                // The block being read reports where the spoken word is, for auto-follow.
-                if let f = mark?.wordFraction {
-                    GeometryReader { g in
-                        Color.clear.preference(key: SpokenWordYKey.self,
-                                               value: g.frame(in: .named(readerContentSpace)).minY + f * g.size.height)
-                    }
-                }
+            // Anchor bounds are the block's real frame. A GeometryReader in the background is offered the scroll
+            // view's flexible height and reports the whole article, which sent read-along to the bottom.
+            .anchorPreference(key: SpokenWordAnchorKey.self, value: .bounds) { anchor in
+                guard let f = mark?.wordFraction else { return nil }
+                return SpokenWordAnchorKey.Mark(anchor: anchor, fraction: CGFloat(f))
             }
             .id(Self.blockID(i))
     }
@@ -195,10 +192,29 @@ private struct BlockView: View, Equatable {
 /// Coordinate space of the reader's scrolled content (set by `ScrollProgressView`).
 let readerContentSpace = "reader-content"
 
-/// Estimated y of the spoken word in `readerContentSpace`.
+/// Estimated y of the spoken word from the top of the article. Nil when nothing is being read, or the block's
+/// frame couldn't be trusted (see `ReadAlongScroll`).
 struct SpokenWordYKey: PreferenceKey {
     static var defaultValue: CGFloat?
-    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = value ?? nextValue() }
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        // Always read the next value. Skipping the call drops later children and can leave a stale y behind.
+        let next = nextValue()
+        if let next { value = next }
+    }
+}
+
+/// The block being read, as an anchor, plus how far the spoken word is through that block (0...1).
+struct SpokenWordAnchorKey: PreferenceKey {
+    struct Mark {
+        var anchor: Anchor<CGRect>
+        var fraction: CGFloat
+    }
+
+    static var defaultValue: Mark?
+    static func reduce(value: inout Mark?, nextValue: () -> Mark?) {
+        let next = nextValue()
+        if value == nil { value = next }
+    }
 }
 
 // MARK: Narration highlight input

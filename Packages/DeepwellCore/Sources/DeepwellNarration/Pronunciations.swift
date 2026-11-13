@@ -1,5 +1,19 @@
 import Foundation
 
+/// Words the speech voice misreads, spoken as a short phrase instead.
+///
+/// Whole-word and case-insensitive, same rules as `pronunciations.yml`. Only the audio changes: the word on screen
+/// and its highlight range stay as written. A line in the user's `pronunciations.yml` for the same word wins.
+/// Add a term here when the voice gets another one wrong.
+public enum PronunciationDictionary {
+    public static let terms: [String: String] = [
+        "subagent": "sub agent",
+        "subagents": "sub agents",
+        "eval": "ee val",
+        "evals": "ee vals",
+    ]
+}
+
 /// Written → spoken replacements for narration, in readcast's `pronunciations.yml` format (`written: spoken`, one per
 /// line). The bundled map ships with the app; the user's map lives at the library root so it syncs, and overrides it.
 /// Matching is case-insensitive and whole-word; only the spoken text changes, never the article.
@@ -29,8 +43,11 @@ public struct PronunciationStore: Sendable {
         try Self.serialise(entries).write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Bundled entries overridden by the user's, keyed case-insensitively (the user's spelling wins).
-    public func merged() -> [String: String] { Self.merge(Self.bundled, load()) }
+    /// Built-in terms, then the bundled file, then the user's entries. The user's spelling wins.
+    public static var presets: [String: String] { merge(PronunciationDictionary.terms, bundled) }
+
+    /// Presets overridden by the user's file, keyed case-insensitively (the user's spelling wins).
+    public func merged() -> [String: String] { Self.merge(Self.presets, load()) }
 
     static func merge(_ base: [String: String], _ overrides: [String: String]) -> [String: String] {
         var byFold: [String: (String, String)] = [:]

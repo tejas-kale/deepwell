@@ -29,6 +29,10 @@ speech model, a couple of chunks ahead of the playhead, and highlights the spoke
   screen's rate menu, and `resumeAfterInterruption`.
 - `OfflinePins` (ticket 17): the phone's Current Focus download list (see "Phone" below).
 - `PronunciationStore`: bundled readcast `pronunciations.yml`, overridden by `<library>/pronunciations.yml` (same format).
+  `PronunciationDictionary.terms` is applied underneath both (the user's entry wins). It currently reads
+  `subagents` as "sub agents" and `evals` as "ee vals". Add a line there for the next word the voice gets wrong.
+  The replacement is only in the text sent to the speech API. Each script word keeps its written form and the
+  character range in the block, so the highlight still covers the word on screen.
 
 ## Storage
 
@@ -69,9 +73,13 @@ the audio with its own voice. Keep Settings > Listen the same on both devices.
 - Reader: a Listen toolbar button and Reader > Listen / Pause (⇧⌘L). The bottom `ListenBar` has sentence back/forward,
   play/pause, progress, generation state, error + Retry, speed and stop. `MarkdownBody` tints the sentence and marks
   the word through `AttributedString` background colours. While narrating, words are `deepwell-word://<index>` links, so a
-  click seeks. Auto-follow estimates the word's y from its block's frame and character offset, and
-  scrolls only when the word leaves the band from 12% to 70% of the viewport, settling it at 28%. A trackpad or wheel
-  gesture (`willStartLiveScroll`) stops following, and "Jump to current" resumes. Keyboard scrolling doesn't stop it. Listening advances `progress`, and finishing marks the item Done.
+  click seeks. Auto-follow takes the word's y from the block's anchor bounds (its real frame in the article) plus the
+  character offset within that block (`ReadAlongScroll`). A background `GeometryReader` is not used: inside the scroll
+  view it was offered the flexible height and reported a frame as tall as the article, so the fraction of a word in an
+  early block landed at the bottom and the page jumped there. The page moves only when the word leaves the band from
+  12% to 70% of the viewport, settling it at 28%, and the offset is set absolutely rather than accumulated. A trackpad
+  or wheel gesture (`willStartLiveScroll`) stops following, and "Jump to current" resumes. Keyboard scrolling doesn't
+  stop it. Listening advances `progress`, and finishing marks the item Done.
 
 ## Phone (ticket 17)
 

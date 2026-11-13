@@ -174,6 +174,8 @@ struct Pronouncer {
     private let longest: Int
 
     init(_ entries: [String: String]) {
+        // Built-in terms first, so a caller that passes only the user map still fixes "evals" unless it overrides it.
+        let entries = PronunciationStore.merge(PronunciationDictionary.terms, entries)
         var m: [[String]: String] = [:]
         for (k, v) in entries {
             let ws = k.split(whereSeparator: \.isWhitespace).map { Self.fold(String($0)) }

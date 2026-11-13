@@ -36,6 +36,8 @@ let package = Package(
         .target(name: "DeepwellUI",
                 dependencies: ["DeepwellModel", "DeepwellNarration", "DeepwellIndex", "DeepwellCuration",
                                "DeepwellYouTube", "DeepwellTranscription", "DeepwellPodcasts"]),
+        .testTarget(name: "DeepwellUITests",
+                    dependencies: ["DeepwellUI", "DeepwellIndex", "DeepwellCuration"]),
         .target(name: "DeepwellNarration",
                 dependencies: ["DeepwellModel", "DeepwellLibrary", "DeepwellTagging", "DeepwellTranscription", "DeepwellIndex",
                                "DeepwellMenu"],

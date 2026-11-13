@@ -391,7 +391,7 @@ private struct PronunciationEditor: View {
         search.isEmpty || w.localizedCaseInsensitiveContains(search) || s.localizedCaseInsensitiveContains(search)
     }
     private var bundled: [(String, String)] {
-        PronunciationStore.bundled.filter { !userKeys.contains($0.key.lowercased()) && matches($0.key, $0.value) }
+        PronunciationStore.presets.filter { !userKeys.contains($0.key.lowercased()) && matches($0.key, $0.value) }
             .sorted { $0.key.lowercased() < $1.key.lowercased() }
     }
 

@@ -5,7 +5,7 @@ Code: `Packages/DeepwellCore/Sources/DeepwellCuration/TagCurator.swift`; the log
 `DeepwellUI/TagsView.swift`, `DeepwellUI/ItemRow.swift`. App glue: Mac `Apps/Deepwell/LibraryModel.swift`,
 `LibraryView.swift`; phone `Apps/DeepwellMobile/FocusLibrary.swift`, `LibraryScreen.swift` (docs/ios.md).
 
-- `TagCurator(root:index:device:)`: `rename`, `merge(_:into:)`, `delete`, `acceptNew`, `acceptAllNew`. Each re-reads every affected file, rewrites its frontmatter (body and unknown keys kept), and upserts that file's index row. Per-file failures are returned in `CurationResult.failed`, not thrown.
+- `TagCurator(root:index:device:)`: `rename`, `merge(_:into:)`, `delete`, `acceptNew`, `acceptAllNew`. Each re-reads every affected file, rewrites its frontmatter (body and unknown keys kept), and upserts that file's index row. Per-file failures are returned in `CurationResult.failed`, not thrown. On the phone, Accept All New also shows `TagAcceptAllFeedback` (banner, haptic, and the tag rows with the new-flags cleared). See docs/ios.md.
 - Tags match ignoring case/separators (`TagName.canonical`, which `Tagger.canonical` forwards to). Rename canonicalises the new name unless an existing tag has the same canonical form (then that spelling is used, i.e. it is a merge). `merge` keeps the target spelling verbatim.
 - `new_tags` flag: renaming, merging away or deleting a tag clears its flag; `acceptNew` clears it and keeps the tag. Flags are stored in the index (schema v2, `new_tags` column; the index is dropped and rebuilt on upgrade) and survive rebuilds.
 - `ItemFilter` gains `tag` (exact) and `hasNewTags`; combinable with type, status and full-text search. `LibraryIndex.tagSummaries()` gives name, item count, new-flag count.

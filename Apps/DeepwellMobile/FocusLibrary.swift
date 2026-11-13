@@ -209,16 +209,21 @@ final class FocusLibrary {
 extension FocusLibrary: TagsModel {
     /// Tag curation on the phone (ticket 19): `TagCurator` appends the op to `.deepwell/tag-ops.jsonl` under this
     /// device's name, rewrites the affected files (coordinated) and refreshes their index rows.
-    func curate(_ action: (TagCurator) throws -> CurationResult) {
-        guard let index else { return }
+    @discardableResult
+    func curate(_ action: (TagCurator) throws -> CurationResult) -> CurationResult? {
+        guard let index else { return nil }
+        let result: CurationResult?
         do {
-            let result = try action(TagCurator(root: folder, index: index, device: SharedConfig.deviceName))
-            errorMessage = result.failed.isEmpty ? nil
-                : "\(result.failed.count) file(s) could not be updated: \(result.failed.keys.sorted().joined(separator: ", "))"
+            let ran = try action(TagCurator(root: folder, index: index, device: SharedConfig.deviceName))
+            errorMessage = ran.failed.isEmpty ? nil
+                : "\(ran.failed.count) file(s) could not be updated: \(ran.failed.keys.sorted().joined(separator: ", "))"
+            result = ran
         } catch {
             errorMessage = "Tag change failed: \(error.localizedDescription)"
+            result = nil
         }
         reloadItems()
+        return result
     }
 
     /// "Show Items" in the tag list: the Library filtered to that tag.

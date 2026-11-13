@@ -135,13 +135,16 @@ final class LibraryModel {
 
 extension LibraryModel: TagsModel {
     /// Runs a tag curation action (file rewrites + index refresh in `TagCurator`), then refreshes the list.
-    func curate(_ action: (TagCurator) throws -> CurationResult) {
-        guard let curator = makeCurator() else { return }
+    @discardableResult
+    func curate(_ action: (TagCurator) throws -> CurationResult) -> CurationResult? {
+        guard let curator = makeCurator() else { return nil }
         do {
             let result = try action(curator)
             reportCuration(result)
+            return result
         } catch {
             reportCurationError("Tag change failed: \(error.localizedDescription)")
+            return nil
         }
     }
 
