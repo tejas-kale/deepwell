@@ -2,15 +2,29 @@ import XCTest
 import DeepwellModel
 @testable import DeepwellNarration
 
-/// Built-in readings for words the voice mispronounces. The spoken form can be several words; the highlight still
+/// Readings from the bundled `pronunciations.yml`. The spoken form can be several words; the highlight still
 /// covers the original token, and the next word's range does not move.
 final class PronunciationNormalizationTests: XCTestCase {
-    func testBuiltInTermsAreTheExtensionPoint() {
-        XCTAssertEqual(PronunciationDictionary.terms["subagents"], "sub agents")
-        XCTAssertEqual(PronunciationDictionary.terms["subagent"], "sub agent")
-        XCTAssertEqual(PronunciationDictionary.terms["evals"], "ee vals")
-        XCTAssertEqual(PronunciationDictionary.terms["eval"], "ee val")
-        XCTAssertGreaterThanOrEqual(PronunciationDictionary.terms.count, 4)
+    /// The file on disk, next to the narration sources. `swift test` runs with the package as the working directory,
+    /// but `#filePath` does not depend on that.
+    private var bundledFile: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // DeepwellNarrationTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // package root
+            .appendingPathComponent("Sources/DeepwellNarration/Resources/pronunciations.yml")
+    }
+
+    func testBundledFileLoadsSubagentsAndEvals() throws {
+        let text = try String(contentsOf: bundledFile, encoding: .utf8)
+        let parsed = PronunciationStore.parse(text)
+        XCTAssertEqual(parsed["subagents"], "sub agents")
+        XCTAssertEqual(parsed["subagent"], "sub agent")
+        XCTAssertEqual(parsed["evals"], "ee vals")
+        XCTAssertEqual(parsed["eval"], "ee val")
+        XCTAssertEqual(parsed["beehiiv"], "beehive")
+        // The copy shipped in the module is that same file.
+        XCTAssertEqual(PronunciationStore.bundled, parsed)
     }
 
     func testSubagentsAndEvalsAreSpokenNaturallyWithoutMovingHighlights() {
@@ -20,7 +34,7 @@ final class PronunciationNormalizationTests: XCTestCase {
         The subagents run nightly.
         """
         let script = NarrationScript.build(item: Item(type: .article, title: "Notes"), body: body,
-                                            pronunciations: [:], model: "m", voice: "v")
+                                            pronunciations: PronunciationStore.bundled, model: "m", voice: "v")
         let blocks = ArticleBlocks.blocks(for: body)
         let located = script.words.filter { $0.location != nil }
 
@@ -45,7 +59,7 @@ final class PronunciationNormalizationTests: XCTestCase {
     func testCasePunctuationAndUnrelatedWords() {
         let body = "Subagents ship EVALS. A medieval evaluation is not an eval."
         let script = NarrationScript.build(item: Item(type: .article, title: "T"), body: body,
-                                            pronunciations: [:], model: "m", voice: "v")
+                                            pronunciations: PronunciationStore.bundled, model: "m", voice: "v")
         let spoken = script.words.filter { $0.location != nil }
         XCTAssertEqual(spoken.map(\.written), ["Subagents", "ship", "EVALS.", "A", "medieval", "evaluation", "is", "not", "an", "eval."])
         XCTAssertEqual(spoken.map(\.spoken), ["sub agents", "ship", "ee vals.", "A", "medieval", "evaluation", "is", "not", "an", "ee val."])
@@ -55,9 +69,10 @@ final class PronunciationNormalizationTests: XCTestCase {
         }
     }
 
-    func testCallerOverrideBeatsTheBuiltInReading() {
+    func testCallerOverrideBeatsTheBundledReading() {
+        let map = PronunciationStore.merge(PronunciationStore.bundled, ["evals": "evaluations"])
         let script = NarrationScript.build(item: Item(type: .article, title: "T"), body: "The evals passed.",
-                                            pronunciations: ["evals": "evaluations"], model: "m", voice: "v")
+                                            pronunciations: map, model: "m", voice: "v")
         let evals = script.words.first { $0.written == "evals" }
         XCTAssertEqual(evals?.spoken, "evaluations")
         XCTAssertFalse(script.chunks.map(\.text).joined().contains("ee vals"))
@@ -68,8 +83,8 @@ final class PronunciationNormalizationTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PronunciationStore(libraryFolder: dir)
-        XCTAssertEqual(PronunciationStore.presets["subagents"], "sub agents")
-        XCTAssertEqual(PronunciationStore.presets["beehiiv"], "beehive")
+        XCTAssertEqual(PronunciationStore.bundled["subagents"], "sub agents")
+        XCTAssertEqual(PronunciationStore.bundled["beehiiv"], "beehive")
         try store.save(["Evals": "evaluations"])
         let merged = store.merged()
         XCTAssertEqual(merged["Evals"], "evaluations")

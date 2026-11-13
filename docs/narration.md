@@ -28,11 +28,11 @@ speech model, a couple of chunks ahead of the playhead, and highlights the spoke
   sentence start (`skip(from:by:times:sentences:)`, always moving at least one sentence), `nearestSpeed` for the lock
   screen's rate menu, and `resumeAfterInterruption`.
 - `OfflinePins` (ticket 17): the phone's Current Focus download list (see "Phone" below).
-- `PronunciationStore`: bundled readcast `pronunciations.yml`, overridden by `<library>/pronunciations.yml` (same format).
-  `PronunciationDictionary.terms` is applied underneath both (the user's entry wins). It currently reads
-  `subagents` as "sub agents" and `evals` as "ee vals". Add a line there for the next word the voice gets wrong.
-  The replacement is only in the text sent to the speech API. Each script word keeps its written form and the
-  character range in the block, so the highlight still covers the word on screen.
+- `PronunciationStore`: bundled `Resources/pronunciations.yml` (readcast's format), overridden by
+  `<library>/pronunciations.yml`. One `written: spoken` pair per line; `#` starts a comment. Matching is whole-word
+  and any case. The file reads `subagents` as "sub agents" and `evals` as "ee vals". Add a line to the bundled file
+  for the next word the voice gets wrong. The replacement is only in the text sent to the speech API. Each script
+  word keeps its written form and the character range in the block, so the highlight still covers the word on screen.
 
 ## Storage
 
