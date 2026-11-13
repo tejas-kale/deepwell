@@ -1,1 +1,9 @@
+# One "written: spoken" pair per line. Whole words, any case. "#" starts a comment.
+# The spoken text is what the voice says; the word on screen and its highlight stay as written.
+# The library's pronunciations.yml overrides the same word. Add a line here when the voice misreads one.
+
 beehiiv: beehive
+subagent: sub agent
+subagents: sub agents
+eval: ee val
+evals: ee vals

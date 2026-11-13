@@ -29,7 +29,7 @@ public struct PronunciationStore: Sendable {
         try Self.serialise(entries).write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Bundled entries overridden by the user's, keyed case-insensitively (the user's spelling wins).
+    /// Bundled file overridden by the user's, keyed case-insensitively (the user's spelling wins).
     public func merged() -> [String: String] { Self.merge(Self.bundled, load()) }
 
     static func merge(_ base: [String: String], _ overrides: [String: String]) -> [String: String] {

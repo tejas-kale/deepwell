@@ -16,7 +16,8 @@ private struct MetricsKey: PreferenceKey {
 ///
 /// While narrating with `following` on, it keeps the spoken word (`SpokenWordYKey`) in a comfortable band: when the word
 /// drops below ~70% of the viewport (or above ~12%), the page moves once so the word sits at ~28%, like turning a page.
-/// It never moves for every word, so it doesn't bob. A scroll gesture by the reader calls `onUserScroll`.
+/// It never moves for every word, so it doesn't bob. The target comes from `ReadAlongScroll`: the block's real frame,
+/// not a fraction of the whole article. A scroll gesture by the reader calls `onUserScroll`.
 public struct ScrollProgressView<Content: View>: View {
     let initialProgress: Double
     var following = false
@@ -36,12 +37,11 @@ public struct ScrollProgressView<Content: View>: View {
     @State private var restored = false
     @State private var offset: CGFloat = 0
     @State private var viewport: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
     @State private var wordY: CGFloat?
+    /// Last offset we asked the scroller for, so a repeat of the same word doesn't restart the animation.
+    @State private var lastFollowTarget: CGFloat?
     @State private var scroller = NativeScroller()
-
-    private static var bandTop: CGFloat { 0.12 }
-    private static var bandBottom: CGFloat { 0.70 }
-    private static var settle: CGFloat { 0.28 }
 
     public var body: some View {
         GeometryReader { outer in
@@ -49,9 +49,18 @@ public struct ScrollProgressView<Content: View>: View {
                 ScrollView {
                     content
                         .coordinateSpace(name: readerContentSpace)
-                        .background(GeometryReader { g in
-                            Color.clear.preference(key: MetricsKey.self, value: Metrics(offset: -g.frame(in: .named("reader")).minY, content: g.size.height))
-                        })
+                        .backgroundPreferenceValue(SpokenWordAnchorKey.self) { spoken in
+                            GeometryReader { g in
+                                let wordY: CGFloat? = spoken.flatMap { mark in
+                                    let frame = g[mark.anchor]
+                                    return ReadAlongScroll.wordY(blockMinY: frame.minY, blockHeight: frame.height,
+                                                                  wordFraction: mark.fraction, contentHeight: g.size.height)
+                                }
+                                Color.clear
+                                    .preference(key: MetricsKey.self, value: Metrics(offset: -g.frame(in: .named("reader")).minY, content: g.size.height))
+                                    .preference(key: SpokenWordYKey.self, value: wordY)
+                            }
+                        }
                         .background(ScrollViewFinder(scroller: scroller, onUserScroll: { onUserScroll() }))
                         .id("content")
                 }
@@ -63,6 +72,7 @@ public struct ScrollProgressView<Content: View>: View {
                 .onChange(of: following) { if following { keepWordInView(force: true) } }
                 .onPreferenceChange(MetricsKey.self) { m in
                     offset = m.offset
+                    contentHeight = m.content
                     viewport = outer.size.height
                     let scrollable = m.content - outer.size.height
                     if !restored {
@@ -74,20 +84,25 @@ public struct ScrollProgressView<Content: View>: View {
                                 proxy.scrollTo("content", anchor: UnitPoint(x: 0.5, y: initialProgress))
                             }
                         }
+                        keepWordInView(force: false)
                         return
                     }
-                    guard scrollable > 0 else { onProgress(1); return }
+                    guard scrollable > 0 else { onProgress(1); keepWordInView(force: false); return }
                     onProgress(min(max(m.offset / scrollable, 0), 1))
+                    // Word y can arrive before the content height. Once both exist, follow.
+                    keepWordInView(force: false)
                 }
             }
         }
     }
 
     private func keepWordInView(force: Bool) {
-        guard following, let y = wordY, viewport > 0 else { return }
-        let inView = y - offset
-        guard force || inView < viewport * Self.bandTop || inView > viewport * Self.bandBottom else { return }
-        scroller.scroll(by: inView - viewport * Self.settle)
+        guard following, let y = wordY else { return }
+        guard let target = ReadAlongScroll.targetOffset(wordY: y, viewport: viewport, contentHeight: contentHeight,
+                                                         currentOffset: offset, force: force) else { return }
+        if !force, let lastFollowTarget, abs(lastFollowTarget - target) < 4 { return }
+        lastFollowTarget = target
+        scroller.scroll(to: target)
     }
 }
 
@@ -109,13 +124,19 @@ final class NativeScroller {
         }
     }
 
-    /// Scrolls the content by `dy` points (positive: further down the article), clamped, eased.
-    func scroll(by dy: CGFloat) {
-        guard let sv = scrollView, let doc = sv.documentView, abs(dy) > 4 else { return }
+    /// Scrolls so the top of the viewport sits `contentOffsetY` points down the article (top-down), clamped, eased.
+    func scroll(to contentOffsetY: CGFloat) {
+        guard let sv = scrollView, let doc = sv.documentView, contentOffsetY.isFinite, doc.frame.height > 1 else { return }
         let clip = sv.contentView
+        let maxY = max(0, doc.frame.height - clip.bounds.height)
+        let topDown = min(max(contentOffsetY, 0), maxY)
         var origin = clip.bounds.origin
-        origin.y += doc.isFlipped ? dy : -dy
+        // The clip view is flipped. SwiftUI's document is too, so a larger bounds origin shows content further
+        // down. A non-flipped document keeps y = 0 at the bottom — the end of the article — so the same top-down
+        // offset is measured up from that end. Setting the origin absolutely avoids walking there by a bad delta.
+        origin.y = doc.isFlipped ? topDown : (maxY - topDown)
         let target = clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin
+        guard abs(target.y - clip.bounds.origin.y) > 4 else { return }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.35
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -157,13 +178,14 @@ final class NativeScroller: NSObject {
         if g.state == .began { onUserScroll() }
     }
 
-    /// Scrolls the content by `dy` points (positive: further down the article), clamped, eased.
-    func scroll(by dy: CGFloat) {
-        guard let sv = scrollView, abs(dy) > 4, !sv.isDragging, !sv.isDecelerating else { return }
+    /// Scrolls so the top of the viewport sits `contentOffsetY` points down the article (top-down), clamped, eased.
+    func scroll(to contentOffsetY: CGFloat) {
+        guard let sv = scrollView, contentOffsetY.isFinite, !sv.isDragging, !sv.isDecelerating else { return }
         let inset = sv.adjustedContentInset
         let minY = -inset.top
         let maxY = max(minY, sv.contentSize.height + inset.bottom - sv.bounds.height)
-        let y = min(max(sv.contentOffset.y + dy, minY), maxY)
+        let y = min(max(contentOffsetY, minY), maxY)
+        guard abs(y - sv.contentOffset.y) > 4 else { return }
         UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]) {
             sv.contentOffset.y = y
         }

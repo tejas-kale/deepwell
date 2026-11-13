@@ -195,6 +195,10 @@ iCloud ────────────────────────�
   Into / Accept / Delete; swipe left to delete, right to rename or accept. "Show Items" filters the Library to that
   tag. `FocusLibrary` is a `TagsModel`: each action runs `TagCurator` with `SharedConfig.deviceName`, which appends
   the op to `.deepwell/tag-ops.jsonl` and rewrites the affected files (coordinated). See docs/tag-curation.md.
+  **Accept All New** confirms in the sheet: a banner ("Accepted 3 new tags." / the one tag's name), a success haptic,
+  and the "new" badges clear on the rows in that same turn (`TagAcceptAllFeedback`). A failure keeps the badges and
+  says the files could not be updated. The rows are pinned from the feedback so the list still updates when the
+  model is only seen through the `TagsModel` protocol.
 - **Reading tab: removed (2026-11-11, at the user's request).** It duplicated the Library, whose status filter gives
   the same in-progress and unread lists. Its "Magazine issues" section ("Splitting on Mac", ticket 20) moved to the top
   of the Library (`PendingIssuesSection`), shown when nothing is searched or filtered. The iPad sidebar has no Reading
