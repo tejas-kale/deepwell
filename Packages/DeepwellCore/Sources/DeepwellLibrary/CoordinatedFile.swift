@@ -118,4 +118,15 @@ public enum CoordinatedFile {
         }
         if let inner { throw inner }
     }
+
+    /// Moves `url` to the Trash under coordination (recoverable, unlike `delete`).
+    public static func trash(_ url: URL, fileManager fm: FileManager = .default) throws {
+        var inner: Error?
+        try coordinate { err in
+            NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forDeleting, error: &err) { u in
+                do { try fm.trashItem(at: u, resultingItemURL: nil) } catch { inner = error }
+            }
+        }
+        if let inner { throw inner }
+    }
 }

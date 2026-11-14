@@ -219,11 +219,30 @@ private struct ItemList: View {
     @Binding var selection: String?
     var pane: FocusState<Pane?>.Binding
 
+    /// The item a Delete was asked for (right click, or the Delete key on the selected row), until confirmed.
+    @State private var deleting: IndexedItem?
+
     private var searching: Bool { !model.searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         List(model.items, id: \.relativePath, selection: $selection) { entry in
-            ItemRow(entry: entry, typeSymbol: entry.item.type.symbol).tag(entry.relativePath)
+            ItemRow(entry: entry, typeSymbol: entry.item.type.symbol)
+                .contextMenu { Button("Delete…", role: .destructive) { deleting = entry } }
+                .tag(entry.relativePath)
+        }
+        .onDeleteCommand { deleting = selection.flatMap { model.entry(path: $0) } }
+        .confirmationDialog("Delete \"\(deleting?.item.title ?? "")\"?",
+                            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            presenting: deleting) { entry in
+            Button("Delete", role: .destructive) {
+                if selection == entry.relativePath { selection = nil }
+                model.delete(entry)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { entry in
+            Text(entry.item.type == .magazineArticle
+                 ? "It moves to the Trash and leaves the library on all your devices. Deleting an issue's last article also removes the issue's original file."
+                 : "It moves to the Trash and leaves the library on all your devices.")
         }
         .focused(pane, equals: .list)
         .ayuSurface(Ayu.panel)

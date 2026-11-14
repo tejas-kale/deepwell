@@ -5,6 +5,7 @@ import DeepwellIndex
 import DeepwellCuration
 import DeepwellUI
 import DeepwellLibrary
+import DeepwellMagazines
 
 /// What the sidebar has selected. Current Focus is this week's bundle; the rest are views of all captures.
 enum LibrarySection: Hashable {
@@ -114,6 +115,19 @@ final class LibraryModel {
     func reportCurationError(_ message: String) { errorMessage = message; reload() }
 
     func rebuildIndex() { scheduleSync(rebuild: true) }
+
+    /// Moves the item's file to the Trash and drops it from the list. The last article of a magazine issue takes the
+    /// issue's original with it (`ItemDeletion`). Other devices follow through iCloud.
+    func delete(_ entry: IndexedItem) {
+        do {
+            try ItemDeletion.delete(relativePath: entry.relativePath, inLibrary: folder)
+            try index?.remove(path: entry.relativePath)
+            errorMessage = nil
+        } catch {
+            errorMessage = "Could not delete \"\(entry.item.title)\": \(error.localizedDescription)"
+        }
+        reload()
+    }
 
     func reload() {
         guard let index else { return }

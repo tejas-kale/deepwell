@@ -37,7 +37,9 @@ enum Fixtures {
         ctx.closePDF()
     }
 
-    static func makeEPUB(at url: URL, chapters: [String]) throws {
+    /// `extraFiles`: more files under OEBPS (path -> content), e.g. a nav document or an NCX; `extraManifest`: their
+    /// `<item>` lines.
+    static func makeEPUB(at url: URL, chapters: [String], extraManifest: String = "", extraFiles: [String: String] = [:]) throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("epub-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let fm = FileManager.default
@@ -54,6 +56,10 @@ enum Fixtures {
             try "<html><head><title>x</title><style>p{}</style></head><body>\(c)</body></html>"
                 .write(to: dir.appendingPathComponent("OEBPS/text/ch\(i).xhtml"), atomically: true, encoding: .utf8)
         }
+        for (path, content) in extraFiles {
+            try content.write(to: dir.appendingPathComponent("OEBPS/\(path)"), atomically: true, encoding: .utf8)
+        }
+        manifest += extraManifest
         try """
         <?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Field Notes Monthly</dc:title></metadata><manifest>\(manifest)</manifest><spine>\(spine)</spine></package>
         """.write(to: dir.appendingPathComponent("OEBPS/content.opf"), atomically: true, encoding: .utf8)
@@ -116,6 +122,51 @@ final class ExtractionTests: XCTestCase {
         XCTAssertTrue(issue.units[0].contains("One & two"))
         XCTAssertFalse(issue.units[1].contains("<"))
         XCTAssertTrue(issue.units[2].contains("Second story."))
+    }
+
+    /// A whole issue exported as one XHTML file (InDesign): the table of contents points at anchors inside it.
+    private static let singleDocument = """
+    <div><p>Masthead</p><p><a href="ch0.xhtml#a1">Alpha</a></p></div><span id="p1"/>
+    <div><h1><a id="a1"></a>Alpha</h1><p>First&#160;story.</p>
+    <p>It goes<br/>on.</p></div>
+    <h1 id="a2">Beta</h1><p>Second story.</p>
+    """
+
+    func testEPUBSingleDocumentIsCutAtNavAnchors() throws {
+        let dir = try Fixtures.tempDir()
+        let url = dir.appendingPathComponent("a.epub")
+        let nav = """
+        <html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+        <nav epub:type="toc"><ol><li><a href="text/ch0.xhtml#a1">Alpha</a></li><li><a href="text/ch0.xhtml#a2">Beta</a></li></ol></nav>
+        <nav epub:type="page-list"><ol><li><a href="text/ch0.xhtml#p1">1</a></li></ol></nav>
+        </body></html>
+        """
+        try Fixtures.makeEPUB(at: url, chapters: [Self.singleDocument],
+                              extraManifest: "<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>",
+                              extraFiles: ["nav.xhtml": nav])
+        // One unit per article, paragraphs kept apart by a blank line; the page-list anchor (p1) is not a cut.
+        XCTAssertEqual(try IssueExtractor.extract(url).units,
+                       ["Masthead\n\nAlpha", "Alpha\n\nFirst story.\n\nIt goes\non.", "Beta\n\nSecond story."])
+        let doc = "OEBPS/text/ch0.xhtml"
+        XCTAssertEqual(try EPUBPackage.parse(ZipArchive(url: url)).units,
+                       [EPUBUnit(path: doc), EPUBUnit(path: doc, fragment: "a1"), EPUBUnit(path: doc, fragment: "a2")])
+    }
+
+    func testEPUBSingleDocumentIsCutAtNCXAnchorsWithoutNav() throws {
+        let dir = try Fixtures.tempDir()
+        let url = dir.appendingPathComponent("a.epub")
+        let ncx = """
+        <?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap>
+        <navPoint id="n1"><navLabel><text>Alpha</text></navLabel><content src="text/ch0.xhtml#a1"/></navPoint>
+        <navPoint id="n2"><navLabel><text>Beta</text></navLabel><content src="text/ch0.xhtml#a2"/></navPoint>
+        </navMap><pageList><pageTarget id="p"><navLabel><text>1</text></navLabel><content src="text/ch0.xhtml#p1"/></pageTarget></pageList></ncx>
+        """
+        try Fixtures.makeEPUB(at: url, chapters: [Self.singleDocument],
+                              extraManifest: "<item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>",
+                              extraFiles: ["toc.ncx": ncx])
+        let units = try IssueExtractor.extract(url).units
+        XCTAssertEqual(units.count, 3)
+        XCTAssertTrue(units[2].hasPrefix("Beta"))
     }
 
     func testUnsupportedFile() {

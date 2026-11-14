@@ -27,8 +27,12 @@ Code: `Packages/DeepwellCore/Sources/DeepwellMagazines`. App glue: `Apps/Deepwel
 ## Text extraction (`IssueText.swift`, `Zip.swift`)
 
 - PDF: PDFKit, one unit per page. Title from the PDF title attribute, else the file name.
-- EPUB: own minimal ZIP reader (stored + deflate via `Compression`), `container.xml` -> OPF manifest/spine; one unit per spine document, HTML
-  stripped with regexes (crude: no tables/ruby/footnote handling). Title from `dc:title`.
+- EPUB: own minimal ZIP reader (stored + deflate via `Compression`), `container.xml` -> OPF manifest/spine. Units are `EPUBPackage.units`:
+  one per spine document, except that a document the table of contents points into is cut at those anchors (`EPUBSections.split`), so an
+  issue exported as a single XHTML file (InDesign; The Nightwatchman) still has one unit per article. The table of contents is the EPUB 3
+  nav document's `toc` list, else the NCX `navMap`; page lists are ignored. A part starts at the block element holding its anchor; text
+  before the first anchor (masthead, contents) is a unit of its own. HTML is stripped with regexes (crude: no tables/ruby/footnote
+  handling); block elements become paragraphs separated by a blank line, numeric entities are decoded. Title from `dc:title`.
 - A **unit index** (0-based) is the position within the issue.
 
 ## Splitting
@@ -50,8 +54,8 @@ Article items: `type: magazine-article`, `issue_id`, `issue_start` / `issue_end`
 ## Reader
 
 For a `magazine-article` item the reader toolbar has "Article text | In issue". "In issue" opens the original: PDF in `PDFView` scrolled to the
-article's first page; EPUB unpacked to `~/Library/Caches/Deepwell/epub/<issueID>` and shown in a `WKWebView` at the article's first spine document
-(it does not scroll within a spine document).
+article's first page; EPUB unpacked to `~/Library/Caches/Deepwell/epub/<issueID>` and shown in a `WKWebView` at the article's first unit
+(the spine document, plus the unit's anchor as the URL fragment when the document was cut at table-of-contents anchors).
 
 ## Share Extension
 
@@ -77,4 +81,19 @@ split issue, Mac discovery → split → marker removed, a second Mac's live cla
 claim released on failure, a Mac-side claim marker, stale markers removed, evicted marker placeholders listed. The
 evicted-original gap above is closed for the Mac by `downloadsIssues`; still not verified on real iCloud.
 Known limits: scroll progress/"done" is tracked on the article text view only; one window may open per file opened via the Dock; rebuilding the library
-from only the Markdown loses nothing (position and `issue_id` are in frontmatter) but deleting an issue's articles makes it pending again and re-splits it.
+from only the Markdown loses nothing (position and `issue_id` are in frontmatter) but deleting an issue's articles by hand (in Finder) makes it
+pending again and re-splits it. Deleting them in the app does not: see below.
+
+## Deleting items (`ItemDeletion`)
+
+Mac: right click a row in the item list > Delete…, or the Delete key on the selected row; both ask first. `LibraryModel.delete` calls
+`ItemDeletion.delete(relativePath:inLibrary:)`, which moves the item's Markdown file to the Trash (coordinated; a volume without a Trash
+falls back to removing it) and, when it was the last article of its issue, the issue's original and its pending marker too, so the issue
+is not split again. The index row is dropped at once; other devices follow through iCloud and their next `LibrarySync` pass. To split an
+issue again (e.g. after a splitter fix), delete its articles and import the file again. Not offered on the phone or in the Current Focus
+list. `ItemDeletionTests` (3) cover the file, a missing file, and the last-article case with no re-split.
+
+EPUB units changed on 2026-11-14 (cut at table-of-contents anchors): `issue_start` of articles imported before that from an EPUB whose
+table of contents points inside spine documents may open "In issue" at the wrong place. `ExtractionTests` has two tests for the cut (nav,
+NCX). Not run on a Mac yet: this change was written in a container without a Swift toolchain; the cut was checked against the real
+Nightwatchman 55 file with a Python port of the same regexes (18 units: front matter, 16 articles, contributors).

@@ -48,7 +48,7 @@ public enum IssueStore {
 }
 
 /// Position of an article inside its issue, stored as `issue_start` / `issue_end` (0-based unit index: PDF page or
-/// EPUB spine document) in the article's frontmatter via `Item.extraFrontmatter`.
+/// EPUB unit, `EPUBPackage.units`) in the article's frontmatter via `Item.extraFrontmatter`.
 public enum IssuePosition {
     public static func read(_ item: Item) -> (start: Int, end: Int)? {
         func val(_ key: String) -> Int? {

@@ -44,9 +44,16 @@ struct IssueReaderView: View {
                 let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                     .appendingPathComponent("Deepwell/epub/\(issueID)", isDirectory: true)
                 if !FileManager.default.fileExists(atPath: root.path) { try zip.extractAll(to: root) }
-                guard pkg.spinePaths.indices.contains(startUnit) || !pkg.spinePaths.isEmpty else { throw ZipError.missing("spine") }
-                let path = pkg.spinePaths.indices.contains(startUnit) ? pkg.spinePaths[startUnit] : pkg.spinePaths[0]
-                source = .epub(chapter: root.appendingPathComponent(path), root: root)
+                // `issue_start` indexes the package's units: a spine document, or a part of one from a TOC anchor on.
+                guard let unit = pkg.units.indices.contains(startUnit) ? pkg.units[startUnit] : pkg.units.first else {
+                    throw ZipError.missing("spine")
+                }
+                var chapter = root.appendingPathComponent(unit.path)
+                if let fragment = unit.fragment, var parts = URLComponents(url: chapter, resolvingAgainstBaseURL: false) {
+                    parts.fragment = fragment
+                    chapter = parts.url ?? chapter
+                }
+                source = .epub(chapter: chapter, root: root)
             case nil: failure = "Unsupported issue format."
             }
         } catch {
