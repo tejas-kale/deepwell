@@ -172,3 +172,26 @@ final class TranscriptionTests: XCTestCase {
         catch { XCTAssertTrue((error as? TranscriptionError)?.errorDescription?.contains("YouTube") == true) }
     }
 }
+
+extension TranscriptionTests {
+    @MainActor func testCaptionlessVideosAreDroppedWhilePodcastsStillTranscribe() async throws {
+        let video = try writeItem(id: "video", type: .youtube)
+        try writeItem(id: "podcast", type: .podcast)
+        let originalVideo = try String(contentsOf: video)
+        let store = TranscriptionStateStore(url: stateURL)
+        store.save([PersistedJob(id: "video", title: "Video", failure: "Old audio failure")])
+        let library = FolderTranscriptionLibrary(access: DirAccess(url: dir.appendingPathComponent("lib")), itemTypes: [.podcast])
+        XCTAssertEqual(try library.itemsNeedingTranscript().map(\.id), ["podcast"])
+        let transcriber = StubTranscriber(.success(words))
+        let queue = TranscriptionQueue(library: library, store: store,
+                                      audio: AudioSource(resolvers: [.podcast: FileResolver()]), transcriber: transcriber)
+        queue.start()
+        await queue.waitUntilIdle()
+        XCTAssertEqual(transcriber.calls, 1)
+        XCTAssertTrue(queue.entries.isEmpty)
+        XCTAssertTrue(store.load().isEmpty)
+        XCTAssertEqual(try String(contentsOf: video), originalVideo)
+        let podcast = try FrontmatterCodec.decode(String(contentsOf: dir.appendingPathComponent("lib/podcast.md")))
+        XCTAssertFalse(podcast.item.needsTranscript)
+    }
+}

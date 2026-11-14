@@ -24,8 +24,24 @@ public enum ArticleBlock: Equatable, Sendable {
 
 public enum ArticleBlocks {
     /// Repair, parse and tidy an item body into the blocks the reader renders.
-    public static func blocks(for markdown: String) -> [ArticleBlock] {
-        ArticleCleaner.clean(parse(MarkdownRepair.repair(markdown)))
+    public static func blocks(for markdown: String, title: String? = nil) -> [ArticleBlock] {
+        var blocks = ArticleCleaner.clean(parse(MarkdownRepair.repair(markdown)))
+        // The reader renders the title separately, and narration includes it in the intro.
+        // EPUB extraction often retains it as an ordinary first paragraph.
+        if let title, let first = blocks.first {
+            let text: String?
+            switch first {
+            case .heading(_, let s), .paragraph(let s): text = s
+            default: text = nil
+            }
+            func normalized(_ s: String) -> String {
+                plainText(s).split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+            }
+            if let text, !normalized(title).isEmpty, normalized(text) == normalized(title) {
+                blocks.removeFirst()
+            }
+        }
+        return blocks
     }
 
     /// Inline Markdown as the reader parses it (bold, italic, code, links), with whitespace preserved.

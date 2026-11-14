@@ -54,8 +54,8 @@ public struct YouTubeTranscriptView: View {
 
     @ViewBuilder private var transcript: some View {
         if item.needsTranscript {
-            // Ticket 06 removes the marker once it has replaced the body with a real transcript.
-            ContentUnavailableView(TranscriptPending.title,
+            // Caption-less videos remain watchable without offering automatic transcription.
+            ContentUnavailableView(TranscriptPending.videoTitle,
                                    systemImage: "text.badge.xmark",
                                    description: Text(TranscriptPending.videoDescription))
         } else if segments.isEmpty {
@@ -124,14 +124,14 @@ extension YouTubeEmbedView: UIViewRepresentable {
 }
 #endif
 
-/// What an item marked `needs_transcript` says. The phone never transcribes (spec: iPhone/iPad companion), so there
-/// it reads "Transcript pending on Mac" (ticket 18); the Mac transcribes it itself.
+/// Videos without captions have no automatic transcription. Podcasts can still be transcribed on the Mac.
 public enum TranscriptPending {
+    public static let videoTitle = "No transcript available"
+    public static let videoDescription = "This video has no published captions."
+
     #if os(iOS)
     public static let title = "Transcript pending on Mac"
-    public static let videoDescription = "This video has no published captions. Your Mac will transcribe it; you can already watch it here."
     #else
     public static let title = "No transcript yet"
-    public static let videoDescription = "This video has no published captions. It is marked needs_transcript and will be transcribed on this Mac."
     #endif
 }

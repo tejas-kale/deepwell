@@ -54,7 +54,9 @@ final class SQLiteDB {
     }
 
     func transaction<T>(_ body: () throws -> T) throws -> T {
-        try exec("BEGIN")
+        // Reserve the writer before reading. A deferred read-to-write upgrade can
+        // fail immediately with SQLITE_BUSY despite the busy timeout.
+        try exec("BEGIN IMMEDIATE")
         do {
             let r = try body()
             try exec("COMMIT")

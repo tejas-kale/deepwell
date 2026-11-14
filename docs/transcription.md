@@ -51,9 +51,9 @@ Package target `DeepwellTranscription` (in `Packages/DeepwellCore`). Consumes th
 
 - **Podcasts (ticket 07):** pass `resolvers: [.podcast: <resolver>]` to `TranscriptionController`; the resolver returns the
   enclosure URL (remote, downloaded to a temp file, deleted afterwards) or a local file URL.
-- **YouTube: STUBBED.** There is no sanctioned audio API; stream extraction violates YouTube's ToS and is brittle. `YouTubeAudioResolverStub`
-  fails these items with an explanatory, retryable error, so caption-less videos stay saved with `needs_transcript`. Possible
-  later: user-supplied local audio file resolver (the pipeline already accepts file URLs).
+- **YouTube:** videos without published captions show “No transcript available” and “This video has no published
+  captions.” They remain watchable, but are excluded from the Mac's transcription queue. Existing queued or failed
+  YouTube jobs are dropped on the next queue sync. No audio helper is used.
 
 ## Verified vs not
 

@@ -97,7 +97,11 @@ final class LibraryModel {
                 Result { try rebuild ? sync.rebuild() : sync.sync() }
             }.value
             guard let self, !Task.isCancelled else { return }
-            if case .failure(let e) = result { self.errorMessage = "Sync failed: \(e.localizedDescription)" }
+            switch result {
+            case .failure(let e): self.errorMessage = "Sync failed: \(e.localizedDescription)"
+            case .success:
+                if self.errorMessage?.hasPrefix("Sync failed:") == true { self.errorMessage = nil }
+            }
             self.reload()
         }
     }

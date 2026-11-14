@@ -26,7 +26,11 @@ extension LibraryFolderStore: FolderAccessing {
 /// Plain-folder implementation: scans `*.md` files and rewrites the file in place.
 public struct FolderTranscriptionLibrary: TranscriptionLibrary {
     private let access: FolderAccessing
-    public init(access: FolderAccessing) { self.access = access }
+    private let itemTypes: Set<ItemType>?
+    public init(access: FolderAccessing, itemTypes: Set<ItemType>? = nil) {
+        self.access = access
+        self.itemTypes = itemTypes
+    }
 
     private func files(in folder: URL) -> [URL] {
         let e = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil,
@@ -41,7 +45,7 @@ public struct FolderTranscriptionLibrary: TranscriptionLibrary {
 
     public func itemsNeedingTranscript() throws -> [PersistedJob] {
         try access.withFolder { folder in
-            files(in: folder).compactMap { parse($0) }.filter { $0.item.needsTranscript }
+            files(in: folder).compactMap { parse($0) }.filter { $0.item.needsTranscript && (itemTypes?.contains($0.item.type) ?? true) }
                 .sorted { $0.item.capturedAt < $1.item.capturedAt }
                 .map { PersistedJob(id: $0.item.id, title: $0.item.title, claim: $0.item.processingClaim) }
         }

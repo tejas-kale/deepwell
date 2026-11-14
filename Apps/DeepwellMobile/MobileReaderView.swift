@@ -145,7 +145,7 @@ struct MobileReaderView: View {
             }.value
             status = doc.item.status
             lastProgress = doc.item.progress
-            blocks = ArticleBlocks.blocks(for: doc.body)
+            blocks = ArticleBlocks.blocks(for: doc.body, title: doc.item.title)
             phase = .ready(doc)
         } catch ICloudPlaceholder.DownloadError.timedOut {
             phase = .failed("It hasn't downloaded from iCloud yet. Check your connection and try again.")

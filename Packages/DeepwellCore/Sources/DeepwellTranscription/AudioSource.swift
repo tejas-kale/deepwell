@@ -20,9 +20,7 @@ public struct AudioSource {
     }
 }
 
-/// YouTube audio: deliberately NOT implemented. YouTube offers no public audio-download API, and extracting
-/// the stream (yt-dlp style) violates its Terms of Service and breaks constantly. This stub fails the item with a
-/// clear, retryable message. Options for later: a user-supplied local audio file, or a user-installed helper.
+/// Reports that YouTube audio is unavailable to hosts that explicitly request a resolver.
 public struct YouTubeAudioResolverStub: AudioURLResolver {
     public init() {}
     public func audioURL(for item: Item) async throws -> URL {

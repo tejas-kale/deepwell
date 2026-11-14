@@ -140,7 +140,7 @@ struct ReaderView: View {
             let doc = try FrontmatterCodec.decode(text)
             status = doc.item.status
             lastProgress = doc.item.progress
-            blocks = ArticleBlocks.blocks(for: doc.body)
+            blocks = ArticleBlocks.blocks(for: doc.body, title: doc.item.title)
             phase = .ready(doc)
         } catch {
             phase = .failed("Could not open this item: \(error.localizedDescription)")

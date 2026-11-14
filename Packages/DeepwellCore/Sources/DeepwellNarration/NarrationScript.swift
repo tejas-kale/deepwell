@@ -54,7 +54,7 @@ public struct NarrationScript: Equatable, Sendable {
     public static func build(item: Item, body: String, pronunciations: [String: String], model: String, voice: String) -> NarrationScript {
         var b = Builder(pronunciations: Pronouncer(pronunciations))
         b.intro(item)
-        for (i, block) in ArticleBlocks.blocks(for: body).enumerated() { b.block(block, index: i) }
+        for (i, block) in ArticleBlocks.blocks(for: body, title: item.title).enumerated() { b.block(block, index: i) }
         b.endSentence()
         var script = NarrationScript(words: b.words, sentences: b.sentences, chunks: [])
         script.chunks = Chunker.chunks(script: script, blockStarts: b.blockStarts).map { range in
