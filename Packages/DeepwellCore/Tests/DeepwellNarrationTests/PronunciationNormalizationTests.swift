@@ -23,8 +23,26 @@ final class PronunciationNormalizationTests: XCTestCase {
         XCTAssertEqual(parsed["evals"], "ee vals")
         XCTAssertEqual(parsed["eval"], "ee val")
         XCTAssertEqual(parsed["beehiiv"], "beehive")
+        XCTAssertEqual(parsed["cyclomatic"], "sigh kluh mat ik")
         // The copy shipped in the module is that same file.
         XCTAssertEqual(PronunciationStore.bundled, parsed)
+    }
+
+    func testCyclomaticIsSpokenNaturallyWithoutMovingHighlights() {
+        let body = "Measure cyclomatic complexity next."
+        let script = NarrationScript.build(item: Item(type: .article, title: "Notes"), body: body,
+                                            pronunciations: PronunciationStore.bundled, model: "m", voice: "v")
+        let located = script.words.filter { $0.location != nil }
+        XCTAssertEqual(located.map(\.written), ["Measure", "cyclomatic", "complexity", "next."])
+        XCTAssertEqual(located.map(\.spoken), ["Measure", "sigh kluh mat ik", "complexity", "next."])
+        let plain = ArticleBlocks.plainText(ArticleBlocks.blocks(for: body)[0].inlineMarkdown!)
+        for word in located {
+            XCTAssertEqual(slice(plain, word.location!.range), word.written)
+        }
+        let cyc = located.first { $0.written == "cyclomatic" }!
+        let next = located.first { $0.written == "complexity" }!
+        XCTAssertEqual(cyc.location?.block, next.location?.block)
+        XCTAssertLessThan(cyc.location!.range.upperBound, next.location!.range.lowerBound)
     }
 
     func testSubagentsAndEvalsAreSpokenNaturallyWithoutMovingHighlights() {

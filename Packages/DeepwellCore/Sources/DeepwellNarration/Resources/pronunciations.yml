@@ -3,6 +3,7 @@
 # The library's pronunciations.yml overrides the same word. Add a line here when the voice misreads one.
 
 beehiiv: beehive
+cyclomatic: sigh kluh mat ik
 subagent: sub agent
 subagents: sub agents
 eval: ee val
