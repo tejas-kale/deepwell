@@ -69,7 +69,13 @@ public struct ScrollProgressView<Content: View>: View {
                     wordY = y
                     keepWordInView(force: false)
                 }
-                .onChange(of: following) { if following { keepWordInView(force: true) } }
+                .onChange(of: following) {
+                    if following {
+                        keepWordInView(force: true)
+                    } else {
+                        lastFollowTarget = nil
+                    }
+                }
                 .onPreferenceChange(MetricsKey.self) { m in
                     offset = m.offset
                     contentHeight = m.content
@@ -101,8 +107,11 @@ public struct ScrollProgressView<Content: View>: View {
         guard let target = ReadAlongScroll.targetOffset(wordY: y, viewport: viewport, contentHeight: contentHeight,
                                                          currentOffset: offset, force: force) else { return }
         if !force, let lastFollowTarget, abs(lastFollowTarget - target) < 4 { return }
-        lastFollowTarget = target
-        scroller.scroll(to: target)
+        // Only remember the target when the scroller actually moved. On iPhone, a Jump during deceleration used to
+        // no-op while still recording lastFollowTarget, so later follow-along skipped the same offset.
+        if scroller.scroll(to: target, force: force) {
+            lastFollowTarget = target
+        }
     }
 }
 
@@ -125,8 +134,11 @@ final class NativeScroller {
     }
 
     /// Scrolls so the top of the viewport sits `contentOffsetY` points down the article (top-down), clamped, eased.
-    func scroll(to contentOffsetY: CGFloat) {
-        guard let sv = scrollView, let doc = sv.documentView, contentOffsetY.isFinite, doc.frame.height > 1 else { return }
+    /// Returns whether a scroll was started. `force` is unused on macOS (kept for the shared call site).
+    @discardableResult
+    func scroll(to contentOffsetY: CGFloat, force: Bool = false) -> Bool {
+        _ = force
+        guard let sv = scrollView, let doc = sv.documentView, contentOffsetY.isFinite, doc.frame.height > 1 else { return false }
         let clip = sv.contentView
         let maxY = max(0, doc.frame.height - clip.bounds.height)
         let topDown = min(max(contentOffsetY, 0), maxY)
@@ -136,7 +148,7 @@ final class NativeScroller {
         // offset is measured up from that end. Setting the origin absolutely avoids walking there by a bad delta.
         origin.y = doc.isFlipped ? topDown : (maxY - topDown)
         let target = clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin
-        guard abs(target.y - clip.bounds.origin.y) > 4 else { return }
+        guard abs(target.y - clip.bounds.origin.y) > 4 else { return false }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.35
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -145,6 +157,7 @@ final class NativeScroller {
         } completionHandler: {
             sv.reflectScrolledClipView(clip)
         }
+        return true
     }
 
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
@@ -179,16 +192,26 @@ final class NativeScroller: NSObject {
     }
 
     /// Scrolls so the top of the viewport sits `contentOffsetY` points down the article (top-down), clamped, eased.
-    func scroll(to contentOffsetY: CGFloat) {
-        guard let sv = scrollView, contentOffsetY.isFinite, !sv.isDragging, !sv.isDecelerating else { return }
+    /// Returns whether a scroll was started. Follow-along never fights a live drag or coast; Jump to current (`force`)
+    /// stops deceleration first so the jump is not dropped (issue #5).
+    @discardableResult
+    func scroll(to contentOffsetY: CGFloat, force: Bool = false) -> Bool {
+        guard let sv = scrollView, contentOffsetY.isFinite else { return false }
+        if sv.isDragging { return false }
+        if sv.isDecelerating {
+            guard force else { return false }
+            // Kill momentum so setContentOffset is not ignored until the coast ends.
+            sv.setContentOffset(sv.contentOffset, animated: false)
+        }
         let inset = sv.adjustedContentInset
         let minY = -inset.top
         let maxY = max(minY, sv.contentSize.height + inset.bottom - sv.bounds.height)
         let y = min(max(contentOffsetY, minY), maxY)
-        guard abs(y - sv.contentOffset.y) > 4 else { return }
+        guard abs(y - sv.contentOffset.y) > 4 else { return false }
         UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]) {
             sv.contentOffset.y = y
         }
+        return true
     }
 }
 
