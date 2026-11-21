@@ -4,6 +4,12 @@ import SwiftUI
 struct DeepwellApp: App {
     @State private var model = AppModel()
 
+    init() {
+        // The notification delegate must be in place before launch finishes, so a click on a reading nudge that
+        // launched the app is still routed (docs/menu.md, Nudges).
+        _ = UserNotificationNudgeScheduler.shared
+    }
+
     var body: some Scene {
         // A single window: `WindowGroup` opens a new window (and a second library index) for every deepwell:// wake-up.
         Window("Deepwell", id: "main") {

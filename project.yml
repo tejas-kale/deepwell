@@ -83,6 +83,9 @@ targets:
           - iCloud.com.tejaskale.deepwell
         com.apple.developer.icloud-services:
           - CloudDocuments
+        # Reading nudge settings and the "nudged today" record (docs/menu.md, Nudges). One identifier for the Mac and
+        # the iPhone app, so both see the same store.
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.tejaskale.deepwell
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)dev.deepwell
         # Ticket 16: the Anthropic and OpenRouter keys are iCloud Keychain items in this group, which the iOS app
