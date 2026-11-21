@@ -46,3 +46,43 @@ candidate cap, and how many recent picks to deprioritise. The template's `{max_m
 `{min_items}` and `{max_bundles}` are filled in from the sizing, so prompt and validator agree. Changes apply to the
 next Build Menu / Rebuild (`MenuController` makes a fresh `MenuService` per use). Stored JSON missing a field
 decodes that field to its default.
+
+# Nudges (ticket #9, spec #8)
+
+When the current focus falls behind the week's pace, the Mac sends one evening notification: "Behind on <topic> this
+week", "Pick up '<title>' (<n> min left)". Clicking it opens that item in the reader.
+
+Code: `DeepwellMenu/ReadingNudge.swift` makes every decision. Mac glue: `Apps/Deepwell/NudgeController.swift`
+(triggers, the iCloud key-value store, the `UNUserNotificationCenter` adapter and the click) and `LibraryView`
+(routing the click).
+
+- **Behind:** expected share = (now − `pickedAt`) ÷ (end of `pickedAt`'s ISO week − `pickedAt`). Behind when expected
+  share − `QueueProgress.fraction` > 0.15 (`MenuSettings.nudgeBehindMargin`, a constant, not a setting). The pace
+  clock starts at the pick, so a Thursday pick is not instantly behind.
+- **No nudge** without a queue, on the pick's calendar day, from the end of the pick's ISO week, when the fraction is
+  1, when nudges are off, or when today is already recorded as nudged.
+- **Article:** among queue rows whose item is in the library, the first `reading` one, else the first `unread` one.
+  Minutes left = entry minutes × (1 − progress), rounded up, at least 1. The payload is the item id.
+- **Mac timing:** at the nudge time while the app runs, and on wake or launch from the nudge time until 22:00. If
+  eligible and behind it delivers now and writes "nudged today". Index refreshes do not trigger it. The timer wakes
+  at least every 5 minutes, so a changed nudge time is picked up; a nudge time missed by more than that (the Mac was
+  asleep) is left to the wake check.
+- **Shared state:** `NSUbiquitousKeyValueStore` (entitlement `com.apple.developer.ubiquity-kvstore-identifier`,
+  `$(TeamIdentifierPrefix)com.tejaskale.deepwell`). Keys: `nudge.enabled` (Bool, default on), `nudge.time` (minutes
+  after midnight, default 1140 = 19:00) and `nudge.nudgedOn` ("yyyy-MM-dd", local day). Nothing is written to
+  `menu.json`. There is no settings UI yet (#11), so the defaults apply unless the store has values.
+- **Permission:** asked once (only while undetermined) when nudges are on, at the first library open. If it is denied,
+  the adapter does nothing and the rest of Deepwell is unaffected.
+- **Click:** opens the item in the reader with Current Focus in the middle column. If the item is not on this Mac or
+  is `done`, it shows Current Focus only. A click that launches the app is kept until the library view is ready.
+- **Not yet:** the iPhone side and its claim on the evening (#10; `ReadingNudge` does nothing for the phone role yet),
+  the Settings UI and mirroring settings to the store (#11).
+
+## Verified vs not
+Verified: `ReadingNudgeTests` (21 tests through `ReadingNudge` with a fake clock, a fake key-value store, a recording
+scheduler and stub items: pace either side of the margin, a mid-week pick, every no-nudge rule, article choice, missing
+items, rounding, Mac launch/wake/scheduled timing and the 22:00 cut-off, "nudged today", settings and defaults).
+`NudgeController.swift` typechecks against `DeepwellMenu`.
+Not verified: a real notification, the permission prompt, the click routing (warm and cold launch), the wake
+observer, the timer firing at the nudge time, the iCloud key-value entitlement being provisioned and real sync. Check
+these by hand on a Mac.
