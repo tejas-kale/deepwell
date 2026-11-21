@@ -4,6 +4,7 @@ import DeepwellLibrary
 import DeepwellCapture
 import DeepwellPodcasts
 import DeepwellMagazines
+import DeepwellMenu
 
 /// Finds the library: the iCloud container's `Documents/`, resolved off the main thread. There is no local fallback
 /// on iOS (spec): signed out of iCloud, or iCloud Drive off for Deepwell, means a clear empty state and no library.
@@ -26,6 +27,10 @@ final class MobileAppModel {
     @ObservationIgnored private let ingestor = InboxIngestor(inbox: CaptureInbox(directory: SharedConfig.inboxDirectory))
     @ObservationIgnored private var ingesting: Task<Void, Never>?
     @ObservationIgnored private var ingestAgain = false
+    /// Ticket 10 (docs/menu.md, Nudges): schedules tonight's reading nudge, or cancels it, whenever the app runs.
+    @ObservationIgnored private let nudge = PhoneNudgeController()
+    /// Whether the library's first read of `menu.json` has run the launch check.
+    @ObservationIgnored private var launchNudgeDone = false
 
     init() {
         let group = Bundle.main.object(forInfoDictionaryKey: "DeepwellAppGroup") as? String
@@ -51,7 +56,15 @@ final class MobileAppModel {
             }
             if library?.location != location {
                 library?.stop()
-                library = FocusLibrary(location: location, onSynced: { [weak self] in self?.tagger.kick() })
+                launchNudgeDone = false
+                library = FocusLibrary(location: location, onSynced: { [weak self] in
+                    self?.tagger.kick()
+                    self?.runNudge(.indexRefresh)
+                }, onFocusLoaded: { [weak self] in
+                    guard let self else { return }
+                    self.runNudge(self.launchNudgeDone ? .indexRefresh : .launch)
+                    self.launchNudgeDone = true
+                })
             }
             phase = .ready
             ingestCaptures()
@@ -109,7 +122,12 @@ final class MobileAppModel {
         if phase == .ready, let library { library.refresh(); ingestCaptures() } else { open() }
         settings.reloadKeys()   // a key entered on the Mac may have arrived through iCloud Keychain
         tagger.kick()
+        runNudge(.wake)         // foreground; the refresh above runs it again with the re-read pick
     }
+
+    /// The reading nudge for the current pick and progress (`ReadingNudge`, phone role). The phone ignores the
+    /// trigger's kind: before the nudge time every run decides afresh.
+    private func runNudge(_ trigger: NudgeTrigger) { nudge.run(focus: library?.focus, trigger: trigger) }
 
     /// Backgrounded: anything this device captured and hasn't tagged yet gets a BGProcessingTask.
     func enteredBackground() { tagger.scheduleBackgroundTagging() }

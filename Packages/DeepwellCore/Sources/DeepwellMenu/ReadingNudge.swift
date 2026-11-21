@@ -18,8 +18,9 @@ public struct NudgeNotification: Equatable, Sendable {
 
 /// Delivery, adapted to `UNUserNotificationCenter` by each app. A denied permission makes the adapter a no-op.
 public protocol NudgeScheduler: AnyObject {
-    /// One notification at `date` (a time today), replacing any pending nudge.
-    func schedule(_ notification: NudgeNotification, at date: Date)
+    /// One notification at `date` (a time today), replacing any pending nudge. false when it was not handed to the
+    /// system (as for `deliverNow`), so the day is not claimed.
+    func schedule(_ notification: NudgeNotification, at date: Date) async -> Bool
     /// Shows `notification` now. false when it was not handed to the system (permission denied or not yet given, or
     /// the request failed), so the day is not recorded as nudged.
     func deliverNow(_ notification: NudgeNotification) async -> Bool
@@ -77,16 +78,39 @@ public struct ReadingNudge {
     /// Steps per minute that minutes left are rounded to before rounding up: a millionth of a minute.
     static let minutesPrecision = 1_000_000.0
 
-    /// The iPhone side (schedule ahead and claim the evening) is ticket 10; until then the phone does nothing.
     public func run(focus: CurrentFocus, role: NudgeDeviceRole, trigger: NudgeTrigger) async {
         switch role {
         case .mac: await runMac(focus: focus, trigger: trigger)
-        case .phone: break
+        case .phone: await runPhone(focus: focus)
         }
     }
 
+    /// "yyyy-MM-dd" (local calendar day) the iPhone has scheduled tonight's nudge for: the Mac stays quiet that day.
+    public static let phoneClaimKey = "nudge.phoneClaimedOn"
+
+    /// Before tonight's nudge time, on any trigger: if eligible and behind, schedule the nudge for the nudge time
+    /// and claim today, so iOS delivers it without waking the app. Otherwise cancel any pending nudge and clear the
+    /// claim, so the Mac covers the evening again. From the nudge time on it does nothing: no late delivery from the
+    /// phone, and a nudge already scheduled stays as it is. A nudge the system did not take (no permission) claims
+    /// nothing.
+    private func runPhone(focus: CurrentFocus) async {
+        let now = now()
+        let time = settings.minuteOfDay
+        guard minuteOfDay(now) < time else { return }
+        guard let queue = focus.queue, let progress = focus.progress,
+              isEligible(queue, progress, now: now), isBehind(queue, progress, now: now),
+              let n = notification(queue, progress) else {
+            scheduler.cancelPending()
+            store.set(nil, forKey: Self.phoneClaimKey)
+            return
+        }
+        let at = calendar.date(bySettingHour: time / 60, minute: time % 60, second: 0, of: now) ?? now
+        let scheduled = await scheduler.schedule(n, at: at)
+        store.set(scheduled ? day(now) : nil, forKey: Self.phoneClaimKey)
+    }
+
     /// At the nudge time while running, and on wake or launch from the nudge time until 22:00: deliver now if
-    /// eligible and behind, then record the day if the nudge was delivered.
+    /// eligible and behind and the iPhone has not claimed today, then record the day if the nudge was delivered.
     private func runMac(focus: CurrentFocus, trigger: NudgeTrigger) async {
         let now = now()
         let minute = minuteOfDay(now), time = settings.minuteOfDay
@@ -97,7 +121,8 @@ public struct ReadingNudge {
         }
         guard let queue = focus.queue, let progress = focus.progress,
               isEligible(queue, progress, now: now), isBehind(queue, progress, now: now),
-              let n = notification(queue, progress) else { return }
+              let n = notification(queue, progress),
+              store.object(forKey: Self.phoneClaimKey) as? String != day(now) else { return }
         guard await scheduler.deliverNow(n) else { return }
         store.set(day(now), forKey: Self.nudgedOnKey)
     }

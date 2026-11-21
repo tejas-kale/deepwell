@@ -1,6 +1,7 @@
 import SwiftUI
 import DeepwellUI
 import DeepwellIndex
+import DeepwellModel
 
 /// iPhone (compact width): a tab per section, each a navigation stack ending in the reader.
 /// iPad (regular width): NavigationSplitView, sidebar → queue → reader, close to the Mac layout.
@@ -41,14 +42,24 @@ struct MobileRootView: View {
     }
 }
 
+/// A tapped reading nudge (docs/menu.md, Nudges): the item's id when it can be read here, nil (show Current Focus
+/// only) when it is not on this device yet or is already done. Clears the cold-launch tap.
+@MainActor
+private func nudgeTarget(_ id: String, in library: FocusLibrary) -> String? {
+    UserNotificationNudgeScheduler.pendingItemID = nil
+    guard let entry = library.entry(id: id), entry.item.status != .done else { return nil }
+    return id
+}
+
 private struct PhoneRoot: View {
     let library: FocusLibrary
     @State private var tab = MobileSection.focus
+    @State private var focusPath: [String] = []
 
     var body: some View {
         TabView(selection: $tab) {
             Tab(MobileSection.focus.title, systemImage: MobileSection.focus.symbol, value: .focus) {
-                NavigationStack { FocusQueueList(library: library).readerDestination(library) }
+                NavigationStack(path: $focusPath) { FocusQueueList(library: library).readerDestination(library) }
             }
             Tab(MobileSection.library.title, systemImage: MobileSection.library.symbol, value: .library) {
                 NavigationStack { LibraryScreen(library: library).readerDestination(library) }
@@ -57,6 +68,16 @@ private struct PhoneRoot: View {
                 NavigationStack { SettingsScreen() }
             }
         }
+        .onAppear { if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) } }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
+            if let id = n.object as? String { openNudgeItem(id) }
+        }
+    }
+
+    /// The item in the reader on the Current Focus tab, or that tab's queue alone.
+    private func openNudgeItem(_ id: String) {
+        tab = .focus
+        focusPath = nudgeTarget(id, in: library).map { [$0] } ?? []
     }
 }
 
@@ -65,6 +86,8 @@ private struct PadRoot: View {
     @State private var section: MobileSection? = .focus
     @State private var itemID: String?
     @State private var visibility = NavigationSplitViewVisibility.all
+    /// Set when a tapped nudge switches the section, so that switch keeps the nudge's item selected.
+    @State private var keepSelection = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $visibility) {
@@ -87,7 +110,17 @@ private struct PadRoot: View {
                 ContentUnavailableView("Pick something to read", systemImage: "text.book.closed")
             }
         }
-        .onChange(of: section) { itemID = nil }
+        .onChange(of: section) { if keepSelection { keepSelection = false } else { itemID = nil } }
+        .onAppear { if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) } }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
+            if let id = n.object as? String { openNudgeItem(id) }
+        }
+    }
+
+    /// Current Focus with the item in the reader column, or Current Focus alone.
+    private func openNudgeItem(_ id: String) {
+        if section != .focus { keepSelection = true; section = .focus }
+        itemID = nudgeTarget(id, in: library)
     }
 }
 

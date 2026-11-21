@@ -46,11 +46,15 @@ final class FocusLibrary {
     @ObservationIgnored private var pinned: [OfflinePins.Pin] = []
 
     @ObservationIgnored private let onSynced: @MainActor () -> Void
+    @ObservationIgnored private let onFocusLoaded: @MainActor () -> Void
 
     /// `onSynced`: after each index sync (files arrived or changed), e.g. to tag what this device captured.
-    init(location: LibraryLocation, onSynced: @escaping @MainActor () -> Void = {}) {
+    /// `onFocusLoaded`: after each read of `menu.json` (`focus` is then set), e.g. to schedule the reading nudge.
+    init(location: LibraryLocation, onSynced: @escaping @MainActor () -> Void = {},
+         onFocusLoaded: @escaping @MainActor () -> Void = {}) {
         self.location = location
         self.onSynced = onSynced
+        self.onFocusLoaded = onFocusLoaded
         do {
             let index = try LibraryIndex(url: LibraryIndex.defaultIndexURL())
             self.index = index
@@ -147,6 +151,7 @@ final class FocusLibrary {
             guard let self, !Task.isCancelled else { return }
             self.focus = CurrentFocus(queue: queue, items: self.allItems)
             self.pinFocus()
+            self.onFocusLoaded()
         }
     }
 
