@@ -15,6 +15,9 @@ public struct CurrentFocus: Equatable, Sendable {
         self.progress = queue.map { QueueProgress.compute(queue: $0, items: items) }
     }
 
+    /// A queue whose progress is already worked out (the Mac app, from its index).
+    public init(queue: WeekQueue?, progress: QueueProgress?) { self.queue = queue; self.progress = progress }
+
     /// Reads `<library>/.deepwell/menu.json` (coordinated, so iCloud downloads an evicted copy first; blocking, call
     /// it off the main thread) and maps it onto `items`.
     public static func load(library: URL, items: [Item]) -> CurrentFocus {

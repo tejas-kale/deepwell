@@ -20,7 +20,9 @@ public struct NudgeNotification: Equatable, Sendable {
 public protocol NudgeScheduler: AnyObject {
     /// One notification at `date` (a time today), replacing any pending nudge.
     func schedule(_ notification: NudgeNotification, at date: Date)
-    func deliverNow(_ notification: NudgeNotification)
+    /// Shows `notification` now. false when it was not handed to the system (permission denied or not yet given, or
+    /// the request failed), so the day is not recorded as nudged.
+    func deliverNow(_ notification: NudgeNotification) async -> Bool
     func cancelPending()
 }
 
@@ -31,6 +33,8 @@ public struct NudgeSettings: Equatable, Sendable {
     /// Minutes after local midnight.
     public static let timeKey = "nudge.time"
     public static let defaultTime = 19 * 60
+    /// 23:59, the latest valid `minuteOfDay`; a stored value outside 0...lastMinuteOfDay is clamped.
+    public static let lastMinuteOfDay = 24 * 60 - 1
 
     public var enabled = true
     public var minuteOfDay = defaultTime
@@ -39,12 +43,8 @@ public struct NudgeSettings: Equatable, Sendable {
 
     public init(store: NudgeKeyValueStore) {
         enabled = store.object(forKey: Self.enabledKey) as? Bool ?? true
-        minuteOfDay = (store.object(forKey: Self.timeKey) as? Int).map { min(max($0, 0), 24 * 60 - 1) } ?? Self.defaultTime
-    }
-
-    public func write(to store: NudgeKeyValueStore) {
-        store.set(enabled, forKey: Self.enabledKey)
-        store.set(minuteOfDay, forKey: Self.timeKey)
+        minuteOfDay = (store.object(forKey: Self.timeKey) as? Int).map { min(max($0, 0), Self.lastMinuteOfDay) }
+            ?? Self.defaultTime
     }
 }
 
@@ -74,17 +74,20 @@ public struct ReadingNudge {
     /// No catch-up nudge on wake or launch from this time (minutes after midnight).
     public static let catchUpCutOff = 22 * 60
 
-    /// The iPhone side (schedule ahead and claim the evening) is ticket #10; until then the phone does nothing.
-    public func run(focus: CurrentFocus, role: NudgeDeviceRole, trigger: NudgeTrigger) {
+    /// Steps per minute that minutes left are rounded to before rounding up: a millionth of a minute.
+    static let minutesPrecision = 1_000_000.0
+
+    /// The iPhone side (schedule ahead and claim the evening) is ticket 10; until then the phone does nothing.
+    public func run(focus: CurrentFocus, role: NudgeDeviceRole, trigger: NudgeTrigger) async {
         switch role {
-        case .mac: runMac(focus: focus, trigger: trigger)
+        case .mac: await runMac(focus: focus, trigger: trigger)
         case .phone: break
         }
     }
 
     /// At the nudge time while running, and on wake or launch from the nudge time until 22:00: deliver now if
-    /// eligible and behind, then record the day.
-    private func runMac(focus: CurrentFocus, trigger: NudgeTrigger) {
+    /// eligible and behind, then record the day if the nudge was delivered.
+    private func runMac(focus: CurrentFocus, trigger: NudgeTrigger) async {
         let now = now()
         let minute = minuteOfDay(now), time = settings.minuteOfDay
         switch trigger {
@@ -95,7 +98,7 @@ public struct ReadingNudge {
         guard let queue = focus.queue, let progress = focus.progress,
               isEligible(queue, progress, now: now), isBehind(queue, progress, now: now),
               let n = notification(queue, progress) else { return }
-        scheduler.deliverNow(n)
+        guard await scheduler.deliverNow(n) else { return }
         store.set(day(now), forKey: Self.nudgedOnKey)
     }
 
@@ -133,7 +136,9 @@ public struct ReadingNudge {
         // Resume before starting something new; rows whose item is not in the library have no status and are skipped.
         guard let row = progress.rows.first(where: { $0.status == .reading })
                 ?? progress.rows.first(where: { $0.status == .unread }) else { return nil }
-        let left = max(1, Int((Double(row.entry.minutes) * (1 - row.progress)).rounded(.up)))
+        // Snapped to a millionth of a minute before rounding up, so 10 × (1 − 0.7) = 3.0000000000000004 is 3, not 4.
+        let exact = Double(row.entry.minutes) * (1 - row.progress)
+        let left = max(1, Int(((exact * Self.minutesPrecision).rounded() / Self.minutesPrecision).rounded(.up)))
         return NudgeNotification(title: "Behind on \(queue.topic) this week",
                                  body: "Pick up '\(row.entry.title)' (\(left) min left)", itemID: row.entry.itemID)
     }

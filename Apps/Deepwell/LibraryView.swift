@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import DeepwellUI
 import DeepwellModel
@@ -82,9 +81,9 @@ struct LibraryView: View {
             if menu == nil, let i = model.index { menu = MenuController(index: i, library: model.folder) }
             // Reading nudge (docs/menu.md, Nudges): the launch check runs once the queue and the items are known.
             if nudge == nil, let menu {
-                nudge = NudgeController { [model] in
+                nudge = NudgeController {
                     menu.refresh()
-                    return CurrentFocus(queue: menu.state.queue, items: model.allItems.map(\.item))
+                    return menu.currentFocus
                 }
             }
             if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) }
@@ -139,20 +138,20 @@ struct LibraryView: View {
     /// (yet) on this Mac or is already done.
     private func openNudgeItem(_ id: String) {
         UserNotificationNudgeScheduler.pendingItemID = nil
-        menu?.refresh()
-        model.searchText = ""
-        model.section = .focus
-        browsingMenu = false
+        showCurrentFocus(browsingMenu: false)
         if let entry = model.entry(id: id), entry.item.status != .done { selection = entry.relativePath; pane = .reader }
         else { selection = nil }
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func openMenu() {
+    private func openMenu() { showCurrentFocus(browsingMenu: true) }
+
+    /// The Current Focus column, freshly refreshed and out of any search; `browsingMenu` shows the menu in it.
+    private func showCurrentFocus(browsingMenu: Bool) {
         menu?.refresh()
         model.searchText = ""
         model.section = .focus
-        browsingMenu = true
+        self.browsingMenu = browsingMenu
     }
 }
 
