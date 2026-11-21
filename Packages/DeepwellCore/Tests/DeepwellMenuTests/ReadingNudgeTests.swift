@@ -198,6 +198,27 @@ final class ReadingNudgeTests: XCTestCase {
         XCTAssertEqual(scheduler.delivered.count, 1)
     }
 
+    // Ticket 11: what Settings > Weekly Menu writes is what `ReadingNudge` acts on.
+    func testSwitchingNudgesOffInSettingsMeansNoNudge() async {
+        NudgeSettings(enabled: false).write(to: kv)
+        await run(focus())
+        XCTAssertTrue(scheduler.delivered.isEmpty)
+        NudgeSettings(enabled: true).write(to: kv)
+        await run(focus())
+        XCTAssertEqual(scheduler.delivered.map(\.itemID), ["a"])
+    }
+
+    func testTimeSetInSettingsIsHonoured() async {
+        NudgeSettings(minuteOfDay: 20 * 60 + 15).write(to: kv)
+        now = nov(18, 20)
+        await run(focus(), .scheduledTime)
+        await run(focus(), .launch)
+        XCTAssertTrue(scheduler.delivered.isEmpty)   // 20:00 is before a 20:15 nudge time
+        now = nov(18, 20, 15)
+        await run(focus(), .scheduledTime)
+        XCTAssertEqual(scheduler.delivered.count, 1)
+    }
+
     func testDefaultsApplyWhenTheStoreIsEmpty() async {
         XCTAssertEqual(NudgeSettings(store: kv), NudgeSettings(enabled: true, minuteOfDay: 19 * 60))
     }

@@ -28,7 +28,7 @@ public protocol NudgeScheduler: AnyObject {
 
 /// Whether and when to nudge, as the Mac mirrors them into the key-value store (Settings > Weekly Menu). A store
 /// without values yet means the defaults: on, 19:00.
-public struct NudgeSettings: Equatable, Sendable {
+public struct NudgeSettings: Codable, Equatable, Sendable {
     public static let enabledKey = "nudge.enabled"
     /// Minutes after local midnight.
     public static let timeKey = "nudge.time"
@@ -45,6 +45,12 @@ public struct NudgeSettings: Equatable, Sendable {
         enabled = store.object(forKey: Self.enabledKey) as? Bool ?? true
         minuteOfDay = (store.object(forKey: Self.timeKey) as? Int).map { min(max($0, 0), Self.lastMinuteOfDay) }
             ?? Self.defaultTime
+    }
+
+    /// Mirrors both settings into `store`, as the Mac does whenever they change in Settings > Weekly Menu.
+    public func write(to store: NudgeKeyValueStore) {
+        store.set(enabled, forKey: Self.enabledKey)
+        store.set(minuteOfDay, forKey: Self.timeKey)
     }
 }
 

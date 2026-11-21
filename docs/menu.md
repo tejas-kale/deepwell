@@ -47,6 +47,14 @@ candidate cap, and how many recent picks to deprioritise. The template's `{max_m
 next Build Menu / Rebuild (`MenuController` makes a fresh `MenuService` per use). Stored JSON missing a field
 decodes that field to its default.
 
+The **Nudges** section (ticket 11) holds the reading nudge (see Nudges below): an on/off switch (default on) and a
+nudge time (default 19:00; the picker is greyed out while nudges are off). Both are `NudgeSettings`, stored as JSON in
+UserDefaults (`nudge.settings`) and mirrored by `Preferences` (`NudgeSettings.write(to:)`) to the iCloud key-value
+store keys `nudge.enabled` and `nudge.time` on every change and at launch, so this Mac's values win; the iPhone only
+reads them. A change restarts the Mac's nudge timer straight away, and switching nudges on asks for notification
+permission if it was never asked. Each device applies them at its next nudge check. Restore All Defaults resets
+these too.
+
 # Nudges (ticket 09, spec 08)
 
 When the current focus falls behind the week's pace, the Mac sends one evening notification: "Behind on <topic> this
@@ -67,26 +75,31 @@ Code: `DeepwellMenu/ReadingNudge.swift` makes every decision. Mac glue: `Apps/De
 - **Mac timing:** at the nudge time while the app runs, and on wake or launch from the nudge time until 22:00. If
   eligible and behind it delivers now and, only if the notification was handed to the system, writes "nudged today"
   (a denied or unanswered permission records nothing, so a later check that evening can still nudge). Index refreshes
-  do not trigger it. The timer wakes at least every 5 minutes, so a changed nudge time is picked up; a wake-up up to
+  do not trigger it. The timer restarts when the settings change and wakes at least every 5 minutes; a wake-up up to
   6 minutes after the nudge time still counts as on time, and a nudge time missed by more (the Mac was asleep) is left
   to the wake check. One check runs at a time.
 - **Shared state:** `NSUbiquitousKeyValueStore` (entitlement `com.apple.developer.ubiquity-kvstore-identifier`,
   `$(TeamIdentifierPrefix)com.tejaskale.deepwell`). Keys: `nudge.enabled` (Bool, default on), `nudge.time` (minutes
   after midnight, default 1140 = 19:00) and `nudge.nudgedOn` ("yyyy-MM-dd", local day). Nothing is written to
-  `menu.json`. There is no settings UI yet (ticket 11), so the defaults apply unless the store has values.
+  `menu.json`. The Mac writes the two settings from Settings > Weekly Menu (above); a store without them means the
+  defaults.
 - **Permission:** asked once (only while undetermined) when nudges are on, at the first library open; the launch
   check waits for the answer. If it is denied, the adapter delivers nothing and the rest of Deepwell is unaffected.
 - **Click:** opens the item in the reader with Current Focus in the middle column. If the item is not on this Mac or
   is `done`, it shows Current Focus only. A click that launches the app is kept until the library view is ready.
 - **Not yet:** the iPhone side and its claim on the evening (ticket 10; `ReadingNudge` does nothing for the phone
-  role yet), the Settings UI and mirroring settings to the store (ticket 11).
+  role yet).
 
 ## Verified vs not (2026-11-21)
-Verified: `ReadingNudgeTests` (23 tests through `ReadingNudge` with a fake clock, a fake key-value store, a recording
+Verified: `ReadingNudgeTests` (25 tests through `ReadingNudge` with a fake clock, a fake key-value store, a recording
 scheduler and stub items: pace either side of the margin, a mid-week pick, every no-nudge rule, article choice, missing
 items, rounding (including floating-point noise), nothing recorded when delivery fails, Mac launch/wake/scheduled
-timing and the 22:00 cut-off, "nudged today", settings and defaults).
+timing and the 22:00 cut-off, "nudged today", settings and defaults, and settings written by
+`NudgeSettings.write(to:)`: switched off means no nudge, a custom time is honoured).
 `NudgeController.swift` typechecks against `DeepwellMenu` in Swift 5 and Swift 6 language modes.
 Not verified: a real notification, the permission prompt, the click routing (warm and cold launch), the wake
 observer, the timer firing at the nudge time, the iCloud key-value entitlement being provisioned and real sync. Check
-these by hand on a Mac.
+these by hand on a Mac. Ticket 11's Settings section, `Preferences` and the timer restart on a settings change were
+not compiled (the sandbox blocks the `@Observable` macro plugin; `NudgeController.swift` alone typechecks in Swift 5 and 6
+modes against a stub `Preferences`) and have not been run: open Settings > Weekly Menu, change the time and the switch,
+and check the next nudge follows.

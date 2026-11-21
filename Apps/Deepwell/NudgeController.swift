@@ -95,16 +95,22 @@ final class NudgeController {
     /// The launch, wake and timer tasks. A `let` of a `Sendable` type, so the nonisolated `deinit` can cancel them
     /// without touching main-actor state.
     private let tasks = OSAllocatedUnfairLock<[Task<Void, Never>]>(initialState: [])
+    /// The nudge-time timer, kept apart from `tasks` so a settings change can replace it.
+    private let timer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
     /// One run at a time, so a wake and the timer firing together cannot both deliver.
     private var isRunning = false
+    /// The switch as last seen, so only switching nudges on asks for permission.
+    private var wasEnabled: Bool
 
     private var nudge: ReadingNudge { ReadingNudge(store: store, scheduler: scheduler) }
 
     /// `focus`: the current queue and its progress, fresh at each call.
     init(focus: @escaping @MainActor () -> CurrentFocus) {
         self.focus = focus
+        _ = Preferences.shared   // mirrors this Mac's nudge settings into the store before the first read
         store.synchronize()
-        let enabled = nudge.settings.enabled
+        let enabled = NudgeSettings(store: store).enabled
+        wasEnabled = enabled
         // The launch check waits for the permission answer, so a first launch after the nudge time can still deliver.
         start { [weak self] in
             await UserNotificationNudgeScheduler.shared.requestPermissionIfNeeded(nudgesEnabled: enabled)
@@ -116,21 +122,44 @@ final class NudgeController {
                 await self.run(.wake)
             }
         }
-        // Fires `.scheduledTime` when the nudge time is reached while the app runs. A target missed by more than
-        // `onTimeWindow` (the Mac slept) is left to the wake trigger.
+        // Settings > Weekly Menu (ticket 11): a changed time or switch restarts the timer at once, and switching
+        // nudges on asks for permission if that was never asked.
         start { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .deepwellNudgeSettingsChanged) {
+                guard let self else { return }
+                await self.settingsChanged()
+            }
+        }
+        startTimer()
+    }
+
+    deinit {
+        tasks.withLock { $0.forEach { $0.cancel() } }
+        timer.withLock { $0?.cancel() }
+    }
+
+    /// Fires `.scheduledTime` when the nudge time is reached while the app runs. A target missed by more than
+    /// `onTimeWindow` (the Mac slept) is left to the wake trigger. Replaces any running timer.
+    private func startTimer() {
+        let task = Task { @MainActor [weak self] in
             guard var target = self?.nextNudgeTime(after: Date()) else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(min(max(target.timeIntervalSinceNow, 1), Self.longestTimerSleep)))
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 let now = Date()
                 if now >= target, now.timeIntervalSince(target) < Self.onTimeWindow { await self.run(.scheduledTime) }
                 target = self.nextNudgeTime(after: now)
             }
         }
+        timer.withLock { $0?.cancel(); $0 = task }
     }
 
-    deinit { tasks.withLock { $0.forEach { $0.cancel() } } }
+    private func settingsChanged() async {
+        let enabled = nudge.settings.enabled
+        defer { wasEnabled = enabled }
+        startTimer()
+        if enabled, !wasEnabled { await scheduler.requestPermissionIfNeeded(nudgesEnabled: true) }
+    }
 
     private func start(_ operation: @escaping @MainActor () async -> Void) {
         let task = Task { @MainActor in await operation() }
