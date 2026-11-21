@@ -28,6 +28,8 @@ targets:
     sources:
       - Apps/Deepwell
       - Apps/Shared
+      # Reading nudge glue shared with the iPhone app (docs/menu.md, Nudges); not in the extensions, which lack DeepwellMenu.
+      - Apps/Nudge
     dependencies:
       - package: DeepwellCore
         product: DeepwellLibrary
@@ -100,6 +102,7 @@ targets:
     sources:
       - Apps/DeepwellMobile
       - Apps/Shared
+      - Apps/Nudge
     dependencies:
       - package: DeepwellCore
         product: DeepwellModel
@@ -152,6 +155,9 @@ targets:
           - iCloud.com.tejaskale.deepwell
         com.apple.developer.icloud-services:
           - CloudDocuments
+        # Reading nudge (docs/menu.md, Nudges): the same key-value store as the Mac, for the settings, the iPhone's
+        # claim on the evening and the "nudged today" record.
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.tejaskale.deepwell
         com.apple.security.application-groups:
           - group.com.tejaskale.deepwell
         keychain-access-groups:

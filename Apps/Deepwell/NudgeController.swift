@@ -1,83 +1,11 @@
 import AppKit
 import Foundation
 import os
-import UserNotifications
 import DeepwellMenu
 
 // Ticket 09 (docs/menu.md, Nudges): Mac glue for `ReadingNudge`. No nudge decisions here; this file only supplies the
-// triggers (nudge time while running, wake, launch), the iCloud key-value store, delivery and the tap.
-
-/// The nudge settings and the "nudged on <day>" record live in iCloud's key-value store, shared with the iPhone.
-extension NSUbiquitousKeyValueStore: @retroactive NudgeKeyValueStore {}
-
-extension Notification.Name {
-    /// Posted when a reading nudge is clicked; `object` is the item id.
-    static let deepwellOpenNudgeItem = Notification.Name("deepwell.openNudgeItem")
-}
-
-/// `UNUserNotificationCenter` adapter for `NudgeScheduler`, and the delegate that routes a click. Delivers nothing
-/// (and says so) when notification permission is not granted.
-final class UserNotificationNudgeScheduler: NSObject, NudgeScheduler, UNUserNotificationCenterDelegate, @unchecked Sendable {
-    static let shared = UserNotificationNudgeScheduler()
-    static let identifier = "deepwell.readingNudge"
-    static let itemIDKey = "itemID"
-
-    /// A click that arrived before any library view was listening (cold launch from the notification).
-    @MainActor static var pendingItemID: String?
-
-    private var center: UNUserNotificationCenter { .current() }
-
-    private override init() {
-        super.init()
-        center.delegate = self
-    }
-
-    /// Asks for alert permission once: only while the answer is still undetermined, and only when nudges are on.
-    /// Returns once the person has answered (or straight away when there is nothing to ask).
-    func requestPermissionIfNeeded(nudgesEnabled: Bool) async {
-        guard nudgesEnabled, await center.notificationSettings().authorizationStatus == .notDetermined else { return }
-        _ = try? await center.requestAuthorization(options: [.alert, .sound])
-    }
-
-    func schedule(_ notification: NudgeNotification, at date: Date) {
-        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        Task { _ = await add(notification, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)) }
-    }
-
-    func deliverNow(_ notification: NudgeNotification) async -> Bool { await add(notification, trigger: nil) }
-
-    func cancelPending() { center.removePendingNotificationRequests(withIdentifiers: [Self.identifier]) }
-
-    /// false when permission is not granted or the system refused the request.
-    private func add(_ n: NudgeNotification, trigger: UNNotificationTrigger?) async -> Bool {
-        let status = await center.notificationSettings().authorizationStatus
-        guard status == .authorized || status == .provisional else { return false }
-        let content = UNMutableNotificationContent()
-        content.title = n.title
-        content.body = n.body
-        content.sound = .default
-        content.userInfo = [Self.itemIDKey: n.itemID]
-        do {
-            try await center.add(UNNotificationRequest(identifier: Self.identifier, content: content, trigger: trigger))
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard response.notification.request.identifier == Self.identifier,
-              let id = response.notification.request.content.userInfo[Self.itemIDKey] as? String else { return }
-        await MainActor.run {
-            Self.pendingItemID = id
-            NotificationCenter.default.post(name: .deepwellOpenNudgeItem, object: id)
-        }
-    }
-
-    /// Show the banner even while Deepwell is frontmost.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
-        -> UNNotificationPresentationOptions { [.banner, .sound] }
-}
+// triggers (nudge time while running, wake, launch). The key-value store, delivery and the click are shared with the
+// iPhone app (`Apps/Nudge/UserNotificationNudgeScheduler.swift`).
 
 /// Runs `ReadingNudge` for the Mac: on launch, on wake, and at the nudge time while running.
 @MainActor
@@ -95,6 +23,8 @@ final class NudgeController {
     /// The launch, wake and timer tasks. A `let` of a `Sendable` type, so the nonisolated `deinit` can cancel them
     /// without touching main-actor state.
     private let tasks = OSAllocatedUnfairLock<[Task<Void, Never>]>(initialState: [])
+    /// The nudge-time timer, kept apart from `tasks` so a settings change can replace it.
+    private let timer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
     /// One run at a time, so a wake and the timer firing together cannot both deliver.
     private var isRunning = false
 
@@ -103,52 +33,74 @@ final class NudgeController {
     /// `focus`: the current queue and its progress, fresh at each call.
     init(focus: @escaping @MainActor () -> CurrentFocus) {
         self.focus = focus
-        store.synchronize()
+        Preferences.shared.mirrorNudge()   // this Mac's nudge settings are in the store before the first read
         let enabled = nudge.settings.enabled
         // The launch check waits for the permission answer, so a first launch after the nudge time can still deliver.
         start { [weak self] in
-            await UserNotificationNudgeScheduler.shared.requestPermissionIfNeeded(nudgesEnabled: enabled)
+            if enabled { await UserNotificationNudgeScheduler.shared.requestPermissionIfNeeded() }
             await self?.run(.launch)
         }
         start { [weak self] in
-            for await _ in NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didWakeNotification) {
+            for await _ in NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didWakeNotification)
+                .map({ _ in }) {
                 guard let self else { return }
                 await self.run(.wake)
             }
         }
-        // Fires `.scheduledTime` when the nudge time is reached while the app runs. A target missed by more than
-        // `onTimeWindow` (the Mac slept) is left to the wake trigger.
+        // Settings > Weekly Menu (ticket 11): a changed time or switch restarts the timer at once, and switching
+        // nudges on asks for permission if that was never asked.
         start { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .deepwellNudgeSettingsChanged).map({ _ in }) {
+                guard let self else { return }
+                await self.settingsChanged()
+            }
+        }
+        startTimer()
+    }
+
+    deinit {
+        tasks.withLock { $0.forEach { $0.cancel() } }
+        timer.withLock { $0?.cancel() }
+    }
+
+    /// Fires `.scheduledTime` when the nudge time is reached while the app runs. A target missed by more than
+    /// `onTimeWindow` (the Mac slept) is left to the wake trigger. Replaces any running timer.
+    private func startTimer() {
+        let task = Task { @MainActor [weak self] in
             guard var target = self?.nextNudgeTime(after: Date()) else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(min(max(target.timeIntervalSinceNow, 1), Self.longestTimerSleep)))
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 let now = Date()
                 if now >= target, now.timeIntervalSince(target) < Self.onTimeWindow { await self.run(.scheduledTime) }
                 target = self.nextNudgeTime(after: now)
             }
         }
+        timer.withLock { $0?.cancel(); $0 = task }
     }
 
-    deinit { tasks.withLock { $0.forEach { $0.cancel() } } }
+    private func settingsChanged() async {
+        startTimer()
+        if nudge.settings.enabled { await scheduler.requestPermissionIfNeeded() }
+    }
 
     private func start(_ operation: @escaping @MainActor () async -> Void) {
         let task = Task { @MainActor in await operation() }
         tasks.withLock { $0.append(task) }
     }
 
+    /// Asks iCloud for the latest store first, so an iPhone claim written earlier today is likely to be seen.
     private func run(_ trigger: NudgeTrigger) async {
         guard !isRunning else { return }
         isRunning = true
         defer { isRunning = false }
+        store.synchronize()
         await nudge.run(focus: focus(), role: .mac, trigger: trigger)
     }
 
     /// The next time of day after `date` that matches the nudge time.
     private func nextNudgeTime(after date: Date) -> Date {
-        let m = nudge.settings.minuteOfDay
-        let parts = DateComponents(hour: m / 60, minute: m % 60)
-        return Calendar.current.nextDate(after: date, matching: parts, matchingPolicy: .nextTime)
+        Calendar.current.nextDate(after: date, matching: nudge.settings.timeOfDay, matchingPolicy: .nextTime)
             ?? date.addingTimeInterval(Self.oneDay)
     }
 }

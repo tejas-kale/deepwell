@@ -16,7 +16,11 @@ final class RecordingScheduler: NudgeScheduler {
     var cancelled = 0
     /// false: like a denied or undetermined permission, nothing reaches the user.
     var canDeliver = true
-    func schedule(_ n: NudgeNotification, at date: Date) { scheduled.append((n, date)) }
+    func schedule(_ n: NudgeNotification, at date: Date) async -> Bool {
+        guard canDeliver else { return false }
+        scheduled.append((n, date))
+        return true
+    }
     func deliverNow(_ n: NudgeNotification) async -> Bool {
         guard canDeliver else { return false }
         delivered.append(n)
@@ -198,6 +202,27 @@ final class ReadingNudgeTests: XCTestCase {
         XCTAssertEqual(scheduler.delivered.count, 1)
     }
 
+    // Ticket 11: what Settings > Weekly Menu writes is what `ReadingNudge` acts on.
+    func testSwitchingNudgesOffInSettingsMeansNoNudge() async {
+        NudgeSettings(enabled: false).write(to: kv)
+        await run(focus())
+        XCTAssertTrue(scheduler.delivered.isEmpty)
+        NudgeSettings(enabled: true).write(to: kv)
+        await run(focus())
+        XCTAssertEqual(scheduler.delivered.map(\.itemID), ["a"])
+    }
+
+    func testTimeSetInSettingsIsHonoured() async {
+        NudgeSettings(minuteOfDay: 20 * 60 + 15).write(to: kv)
+        now = nov(18, 20)
+        await run(focus(), .scheduledTime)
+        await run(focus(), .launch)
+        XCTAssertTrue(scheduler.delivered.isEmpty)   // 20:00 is before a 20:15 nudge time
+        now = nov(18, 20, 15)
+        await run(focus(), .scheduledTime)
+        XCTAssertEqual(scheduler.delivered.count, 1)
+    }
+
     func testDefaultsApplyWhenTheStoreIsEmpty() async {
         XCTAssertEqual(NudgeSettings(store: kv), NudgeSettings(enabled: true, minuteOfDay: 19 * 60))
     }
@@ -226,5 +251,101 @@ final class ReadingNudgeTests: XCTestCase {
         kv.values[ReadingNudge.nudgedOnKey] = "2026-11-17"
         await run(focus())
         XCTAssertEqual(scheduler.delivered.count, 1)
+    }
+
+    // MARK: iPhone (ticket 10)
+
+    func testPhoneSchedulesTonightsNudgeAndClaimsTodayWhenBehind() async {
+        now = nov(18, 8)   // Wednesday morning, before 19:00
+        await run(focus(), role: .phone)
+        XCTAssertEqual(scheduler.scheduled.map(\.0), [NudgeNotification(title: "Behind on Rust this week",
+                                                                      body: "Pick up 'Ownership in depth' (50 min left)",
+                                                                      itemID: "a")])
+        XCTAssertEqual(scheduler.scheduled.map(\.1), [nov(18, 19)])
+        XCTAssertEqual(kv.values[ReadingNudge.phoneClaimKey] as? String, "2026-11-18")
+        XCTAssertTrue(scheduler.delivered.isEmpty)
+    }
+
+    // Wednesday 08:00 is 56 h of 168 h (0.333); a fraction of 0.25 is 8 points behind: on pace.
+    func testPhoneCancelsAndClearsTodaysClaimOnceCaughtUp() async {
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        await run(focus(items: [item("a", .reading, 0.5), item("b")]), .indexRefresh, role: .phone)
+        XCTAssertEqual(scheduler.cancelled, 1)
+        XCTAssertNil(kv.values[ReadingNudge.phoneClaimKey])
+        XCTAssertEqual(scheduler.scheduled.count, 1)
+    }
+
+    // The time set on the Mac reaches the phone through the store.
+    func testPhoneSchedulesAtTheNudgeTimeFromTheStore() async {
+        NudgeSettings(minuteOfDay: 17 * 60 + 45).write(to: kv)
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        XCTAssertEqual(scheduler.scheduled.map(\.1), [nov(18, 17, 45)])
+        XCTAssertEqual(kv.values[ReadingNudge.phoneClaimKey] as? String, "2026-11-18")
+    }
+
+    // Nudges switched off on the Mac after the phone claimed the evening: the phone withdraws its nudge and claim.
+    func testPhoneWithNudgesOffCancelsAndClearsItsClaim() async {
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        NudgeSettings(enabled: false).write(to: kv)
+        await run(focus(), .wake, role: .phone)
+        XCTAssertEqual(scheduler.cancelled, 1)
+        XCTAssertNil(kv.values[ReadingNudge.phoneClaimKey])
+        XCTAssertEqual(scheduler.scheduled.count, 1)
+    }
+
+    // Permission denied on the phone: no claim, so the Mac still covers the evening.
+    func testPhoneDoesNotClaimWhenItCouldNotSchedule() async {
+        scheduler.canDeliver = false
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        XCTAssertNil(kv.values[ReadingNudge.phoneClaimKey])
+        now = nov(18, 19)
+        scheduler.canDeliver = true
+        await run(focus(), .scheduledTime, role: .mac)
+        XCTAssertEqual(scheduler.delivered.map(\.itemID), ["a"])
+    }
+
+    // A nudge already scheduled for 19:00 stays pending (and claimed) through the evening; nothing is delivered late.
+    func testPhoneDoesNothingFromTheNudgeTime() async {
+        kv.values[ReadingNudge.phoneClaimKey] = "2026-11-18"
+        now = nov(18, 19)
+        await run(focus(), role: .phone)
+        await run(focus(items: [item("a", .done, 1), item("b", .done, 1)]), .wake, role: .phone)
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertTrue(scheduler.delivered.isEmpty)
+        XCTAssertEqual(scheduler.cancelled, 0)
+        XCTAssertEqual(kv.values[ReadingNudge.phoneClaimKey] as? String, "2026-11-18")
+    }
+
+    // MARK: Mac and the iPhone's claim (ticket 10)
+
+    func testMacDefersWhenThePhoneHasClaimedToday() async {
+        kv.values[ReadingNudge.phoneClaimKey] = "2026-11-18"
+        now = nov(18, 19)
+        await run(focus(), .scheduledTime)
+        now = nov(18, 21)
+        await run(focus(), .wake)
+        XCTAssertTrue(scheduler.delivered.isEmpty)
+        XCTAssertNil(kv.values[ReadingNudge.nudgedOnKey])
+    }
+
+    func testMacDeliversWhenThePhonesClaimIsForAnotherDay() async {
+        kv.values[ReadingNudge.phoneClaimKey] = "2026-11-17"
+        now = nov(18, 19)
+        await run(focus(), .scheduledTime)
+        XCTAssertEqual(scheduler.delivered.map(\.itemID), ["a"])
+    }
+
+    // Both devices on one store: the phone schedules in the morning, so the Mac stays quiet at 19:00. One nudge.
+    func testOneNudgeWithBothDevices() async {
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        now = nov(18, 19)
+        await run(focus(), .scheduledTime, role: .mac)
+        XCTAssertEqual(scheduler.scheduled.count, 1)
+        XCTAssertTrue(scheduler.delivered.isEmpty)
     }
 }

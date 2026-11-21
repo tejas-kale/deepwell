@@ -45,7 +45,8 @@ private struct GeneralSettingsView: View {
     }
 }
 
-/// How Build Menu / Rebuild works: model, effort, prompt and sizing. Applies to the next build.
+/// How Build Menu / Rebuild works: model, effort, prompt and sizing, which apply to the next build. Also the reading
+/// nudge switch and time, which apply at the next nudge check on the Mac and the iPhone.
 private struct MenuSettingsView: View {
     @Bindable var preferences: Preferences
     private static let models = [("Opus 5.5", "claude-opus-5-5"), ("Sonnet 5.5", "claude-sonnet-5-5"), ("Haiku 5.5", "claude-haiku-5-5")]
@@ -105,13 +106,36 @@ private struct MenuSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("Nudge me when I fall behind", isOn: $preferences.nudge.enabled)
+                DatePicker("Nudge time", selection: nudgeTime, displayedComponents: .hourAndMinute)
+                    .disabled(!preferences.nudge.enabled)
+            } header: {
+                Text("Nudges")
+            } footer: {
+                Text("One evening notification when the current focus falls behind the week's pace. "
+                     + "Your iPhone follows these settings through iCloud.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             HStack {
                 Spacer()
-                Button("Restore All Defaults") { preferences.menu = MenuSettings() }.disabled(z == MenuSettings())
+                Button("Restore All Defaults") {
+                    preferences.menu = MenuSettings()
+                    preferences.nudge = NudgeSettings()
+                }
+                .disabled(z == MenuSettings() && preferences.nudge == NudgeSettings())
             }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 640)
+    }
+
+    /// The nudge time (minutes after midnight) as a time of day today, for the picker.
+    private var nudgeTime: Binding<Date> {
+        Binding(
+            get: { preferences.nudge.time(on: Date(), calendar: .current) ?? Date() },
+            set: { preferences.nudge.minuteOfDay = NudgeSettings.minuteOfDay(of: $0, calendar: .current) })
     }
 }
 
