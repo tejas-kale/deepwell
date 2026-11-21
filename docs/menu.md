@@ -85,16 +85,21 @@ the permission request and the click or tap). Mac glue: `Apps/Deepwell/NudgeCont
 - **Mac timing:** at the nudge time while the app runs, and on wake or launch from the nudge time until 22:00. If
   eligible and behind and there is no iPhone claim for today, it delivers now and, only if the notification was
   handed to the system, writes "nudged today" (a denied or unanswered permission records nothing, so a later check
-  that evening can still nudge). Index refreshes do not trigger it. The timer restarts when the settings change and wakes at least every 5 minutes; a wake-up up to
-  6 minutes after the nudge time still counts as on time, and a nudge time missed by more (the Mac was asleep) is left
-  to the wake check. One check runs at a time.
+  that evening can still nudge). Index refreshes do not trigger it. The timer restarts when the settings change and
+  wakes at least every 5 minutes; a wake-up up to 6 minutes after the nudge time still counts as on time, and a nudge
+  time missed by more (the Mac was asleep) is left to the wake check. One check runs at a time.
+- **Edge cases (accepted in spec #8):** moving the nudge time earlier, to before the moment the phone next runs, leaves
+  the nudge already scheduled for the old time in place, because from the new nudge time on the phone does nothing; it
+  fires at the old time, and the claim keeps the Mac quiet. The key-value store syncs eventually, so a claim or a
+  "nudged today" that has not reached the other device yet can occasionally mean a nudge from both devices.
 - **Shared state:** `NSUbiquitousKeyValueStore` (entitlement `com.apple.developer.ubiquity-kvstore-identifier`,
   `$(TeamIdentifierPrefix)com.tejaskale.deepwell`). Keys: `nudge.enabled` (Bool, default on), `nudge.time` (minutes
   after midnight, default 1140 = 19:00), `nudge.nudgedOn` and `nudge.phoneClaimedOn` (both "yyyy-MM-dd", local day).
   Both app targets carry the entitlement with the same identifier. Nothing is written to `menu.json`. The Mac writes
   the two settings from Settings > Weekly Menu (above); a store without them means the defaults.
-- **Permission:** asked once (only while undetermined) when nudges are on, at the first library open on the Mac and
-  before the iPhone's first decision; that first check waits for the answer. If it is denied, the adapter delivers
+- **Permission:** asked once per app run (only while undetermined) when nudges are on, at the first library open on
+  the Mac (or when nudges are switched on in Settings) and before the iPhone's first decision; that first check waits
+  for the answer. If it is denied, the adapter delivers
   and schedules nothing and the rest of Deepwell is unaffected.
 - **Click:** opens the item in the reader with Current Focus in the middle column. If the item is not on this Mac or
   is `done`, it shows Current Focus only. A click that launches the app is kept until the library view is ready.
@@ -102,15 +107,14 @@ the permission request and the click or tap). Mac glue: `Apps/Deepwell/NudgeCont
   reader column). If the item is not on the device yet (not synced) or is `done`, Current Focus only. A tap that
   launches the app is kept until the library is open.
 
-
 ## Verified vs not (2026-11-21)
-Verified: `ReadingNudgeTests` (32 tests through `ReadingNudge` with a fake clock, a fake key-value store, a recording
+Verified: `ReadingNudgeTests` (34 tests through `ReadingNudge` with a fake clock, a fake key-value store, a recording
 scheduler and stub items: pace either side of the margin, a mid-week pick, every no-nudge rule, article choice, missing
 items, rounding (including floating-point noise), nothing recorded when delivery fails, Mac launch/wake/scheduled
 timing and the 22:00 cut-off, "nudged today", settings and defaults, and settings written by
 `NudgeSettings.write(to:)`: switched off means no nudge, a custom time is honoured. Ticket 10: the phone schedules for
-19:00 and claims when behind, cancels and clears once caught up, does nothing from the nudge time, and claims nothing
-when it could not schedule; the Mac defers on today's claim and delivers on another day's claim; one nudge with both
+19:00 or the stored time and claims when behind, cancels and clears once caught up or with nudges off, does nothing
+from the nudge time, and claims nothing when it could not schedule; the Mac defers on today's claim and delivers on another day's claim; one nudge with both
 devices).
 `NudgeController.swift` typechecks against `DeepwellMenu` in Swift 5 and Swift 6 language modes, with
 `UserNotificationNudgeScheduler.swift` (ticket 10). After ticket 10 the whole `Deepwell` (macOS) and `DeepwellMobile`

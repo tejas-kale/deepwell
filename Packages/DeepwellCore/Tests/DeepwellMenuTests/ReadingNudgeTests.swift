@@ -276,6 +276,26 @@ final class ReadingNudgeTests: XCTestCase {
         XCTAssertEqual(scheduler.scheduled.count, 1)
     }
 
+    // The time set on the Mac reaches the phone through the store.
+    func testPhoneSchedulesAtTheNudgeTimeFromTheStore() async {
+        NudgeSettings(minuteOfDay: 17 * 60 + 45).write(to: kv)
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        XCTAssertEqual(scheduler.scheduled.map(\.1), [nov(18, 17, 45)])
+        XCTAssertEqual(kv.values[ReadingNudge.phoneClaimKey] as? String, "2026-11-18")
+    }
+
+    // Nudges switched off on the Mac after the phone claimed the evening: the phone withdraws its nudge and claim.
+    func testPhoneWithNudgesOffCancelsAndClearsItsClaim() async {
+        now = nov(18, 8)
+        await run(focus(), role: .phone)
+        NudgeSettings(enabled: false).write(to: kv)
+        await run(focus(), .wake, role: .phone)
+        XCTAssertEqual(scheduler.cancelled, 1)
+        XCTAssertNil(kv.values[ReadingNudge.phoneClaimKey])
+        XCTAssertEqual(scheduler.scheduled.count, 1)
+    }
+
     // Permission denied on the phone: no claim, so the Mac still covers the evening.
     func testPhoneDoesNotClaimWhenItCouldNotSchedule() async {
         scheduler.canDeliver = false

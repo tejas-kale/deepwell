@@ -134,14 +134,8 @@ private struct MenuSettingsView: View {
     /// The nudge time (minutes after midnight) as a time of day today, for the picker.
     private var nudgeTime: Binding<Date> {
         Binding(
-            get: {
-                let m = preferences.nudge.minuteOfDay
-                return Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
-            },
-            set: {
-                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
-                preferences.nudge.minuteOfDay = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-            })
+            get: { preferences.nudge.time(on: Date(), calendar: .current) ?? Date() },
+            set: { preferences.nudge.minuteOfDay = NudgeSettings.minuteOfDay(of: $0, calendar: .current) })
     }
 }
 

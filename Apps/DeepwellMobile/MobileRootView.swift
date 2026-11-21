@@ -42,11 +42,10 @@ struct MobileRootView: View {
     }
 }
 
-/// A tapped reading nudge (docs/menu.md, Nudges): the item's id when it can be read here, nil (show Current Focus
-/// only) when it is not on this device yet or is already done. Clears the cold-launch tap.
+/// The item a tapped reading nudge opens (docs/menu.md, Nudges): its id when it can be read here, nil (show Current
+/// Focus only) when it is not on this device yet or is already done.
 @MainActor
-private func nudgeTarget(_ id: String, in library: FocusLibrary) -> String? {
-    UserNotificationNudgeScheduler.pendingItemID = nil
+private func readableNudgeItem(_ id: String, in library: FocusLibrary) -> String? {
     guard let entry = library.entry(id: id), entry.item.status != .done else { return nil }
     return id
 }
@@ -68,16 +67,13 @@ private struct PhoneRoot: View {
                 NavigationStack { SettingsScreen() }
             }
         }
-        .onAppear { if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) } }
-        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
-            if let id = n.object as? String { openNudgeItem(id) }
-        }
+        .onNudgeTapped(openNudgeItem)
     }
 
     /// The item in the reader on the Current Focus tab, or that tab's queue alone.
     private func openNudgeItem(_ id: String) {
         tab = .focus
-        focusPath = nudgeTarget(id, in: library).map { [$0] } ?? []
+        focusPath = readableNudgeItem(id, in: library).map { [$0] } ?? []
     }
 }
 
@@ -111,20 +107,32 @@ private struct PadRoot: View {
             }
         }
         .onChange(of: section) { if keepSelection { keepSelection = false } else { itemID = nil } }
-        .onAppear { if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) } }
-        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
-            if let id = n.object as? String { openNudgeItem(id) }
-        }
+        .onNudgeTapped(openNudgeItem)
     }
 
     /// Current Focus with the item in the reader column, or Current Focus alone.
     private func openNudgeItem(_ id: String) {
         if section != .focus { keepSelection = true; section = .focus }
-        itemID = nudgeTarget(id, in: library)
+        itemID = readableNudgeItem(id, in: library)
     }
 }
 
 private extension View {
+    /// Calls `open` with the item id of a tapped reading nudge: one that arrives while this view is shown, or one that
+    /// cold-launched the app before any view was listening. Clears that cold-launch tap.
+    func onNudgeTapped(_ open: @escaping (String) -> Void) -> some View {
+        onAppear {
+            guard let id = UserNotificationNudgeScheduler.pendingItemID else { return }
+            UserNotificationNudgeScheduler.pendingItemID = nil
+            open(id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
+            guard let id = n.object as? String else { return }
+            UserNotificationNudgeScheduler.pendingItemID = nil
+            open(id)
+        }
+    }
+
     func readerDestination(_ library: FocusLibrary) -> some View {
         navigationDestination(for: String.self) { id in
             if let entry = library.entry(id: id) {

@@ -31,11 +31,19 @@ final class UserNotificationNudgeScheduler: NSObject, NudgeScheduler, UNUserNoti
         center.delegate = self
     }
 
-    /// Asks for alert permission once: only while the answer is still undetermined, and only when nudges are on.
-    /// Returns once the person has answered (or straight away when there is nothing to ask).
-    func requestPermissionIfNeeded(nudgesEnabled: Bool) async {
-        guard nudgesEnabled, await center.notificationSettings().authorizationStatus == .notDetermined else { return }
-        _ = try? await center.requestAuthorization(options: [.alert, .sound])
+    /// The one permission request of this run, shared by every caller so each waits for the same answer.
+    @MainActor private var permissionRequest: Task<Void, Never>?
+
+    /// Asks for alert permission once per run, and only while the answer is still undetermined. Callers ask only
+    /// when nudges are on. Returns once the person has answered (or straight away when there is nothing to ask).
+    @MainActor func requestPermissionIfNeeded() async {
+        let request = permissionRequest ?? Task {
+            let center = UNUserNotificationCenter.current()
+            guard await center.notificationSettings().authorizationStatus == .notDetermined else { return }
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        }
+        permissionRequest = request
+        await request.value
     }
 
     /// Same identifier as any pending nudge, so it replaces it.

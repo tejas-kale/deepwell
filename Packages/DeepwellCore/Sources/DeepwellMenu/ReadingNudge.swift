@@ -48,6 +48,20 @@ public struct NudgeSettings: Codable, Equatable, Sendable {
             ?? Self.defaultTime
     }
 
+    /// The nudge time as an hour and a minute.
+    public var timeOfDay: DateComponents { DateComponents(hour: minuteOfDay / 60, minute: minuteOfDay % 60) }
+
+    /// The nudge time on the calendar day of `day`.
+    public func time(on day: Date, calendar: Calendar) -> Date? {
+        calendar.date(bySettingHour: minuteOfDay / 60, minute: minuteOfDay % 60, second: 0, of: day)
+    }
+
+    /// Minutes after local midnight of `date`, as `minuteOfDay` counts them.
+    public static func minuteOfDay(of date: Date, calendar: Calendar) -> Int {
+        let c = calendar.dateComponents([.hour, .minute], from: date)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+
     /// Mirrors both settings into `store`, as the Mac does whenever they change in Settings > Weekly Menu.
     public func write(to store: NudgeKeyValueStore) {
         store.set(enabled, forKey: Self.enabledKey)
@@ -101,8 +115,8 @@ public struct ReadingNudge {
     /// nothing.
     private func runPhone(focus: CurrentFocus) async {
         let now = now()
-        let time = settings.minuteOfDay
-        guard minuteOfDay(now) < time else { return }
+        let settings = settings
+        guard minuteOfDay(now) < settings.minuteOfDay else { return }
         guard let queue = focus.queue, let progress = focus.progress,
               isEligible(queue, progress, now: now), isBehind(queue, progress, now: now),
               let n = notification(queue, progress) else {
@@ -110,7 +124,7 @@ public struct ReadingNudge {
             store.set(nil, forKey: Self.phoneClaimKey)
             return
         }
-        let at = calendar.date(bySettingHour: time / 60, minute: time % 60, second: 0, of: now) ?? now
+        let at = settings.time(on: now, calendar: calendar) ?? now
         let scheduled = await scheduler.schedule(n, at: at)
         store.set(scheduled ? day(now) : nil, forKey: Self.phoneClaimKey)
     }
@@ -153,10 +167,7 @@ public struct ReadingNudge {
 
     private func weekEnd(of queue: WeekQueue) -> Date? { calendar.dateInterval(of: .weekOfYear, for: queue.pickedAt)?.end }
 
-    private func minuteOfDay(_ date: Date) -> Int {
-        let c = calendar.dateComponents([.hour, .minute], from: date)
-        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
-    }
+    private func minuteOfDay(_ date: Date) -> Int { NudgeSettings.minuteOfDay(of: date, calendar: calendar) }
 
     private func day(_ date: Date) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)

@@ -13,33 +13,30 @@ final class PhoneNudgeController {
     private let scheduler = UserNotificationNudgeScheduler.shared
     /// The run in progress; a call meanwhile replaces `next`, so one more run follows with the latest focus.
     private var running: Task<Void, Never>?
-    private var next: (CurrentFocus, NudgeTrigger)?
-    private var askedPermission = false
+    private var next: CurrentFocus?
 
     init() { store.synchronize() }
 
     /// `focus` nil means `menu.json` has not been read yet: nothing to decide, and a pending nudge is left alone.
-    func run(focus: CurrentFocus?, trigger: NudgeTrigger) {
+    func run(focus: CurrentFocus?) {
         guard let focus else { return }
-        next = (focus, trigger)
+        next = focus
         guard running == nil else { return }
         running = Task { [weak self] in
-            while let self, let (focus, trigger) = self.next {
+            while let self, let focus = self.next {
                 self.next = nil
-                await self.decide(focus: focus, trigger: trigger)
+                await self.decide(focus: focus)
             }
             self?.running = nil
         }
     }
 
-    private func decide(focus: CurrentFocus, trigger: NudgeTrigger) async {
+    private func decide(focus: CurrentFocus) async {
         store.synchronize()
         let nudge = ReadingNudge(store: store, scheduler: scheduler)
-        // Asked once, when nudges are on; the first decision waits for the answer so it can schedule straight away.
-        if !askedPermission, nudge.settings.enabled {
-            askedPermission = true
-            await scheduler.requestPermissionIfNeeded(nudgesEnabled: true)
-        }
-        await nudge.run(focus: focus, role: .phone, trigger: trigger)
+        // Asked when nudges are on; the first decision waits for the answer so it can schedule straight away.
+        if nudge.settings.enabled { await scheduler.requestPermissionIfNeeded() }
+        // The phone role ignores the trigger: before the nudge time every run decides afresh.
+        await nudge.run(focus: focus, role: .phone, trigger: .launch)
     }
 }

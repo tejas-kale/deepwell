@@ -51,7 +51,8 @@ final class Preferences {
         mirrorNudge()   // the Mac is the only writer of the nudge settings: its values win over the store's
     }
 
-    private func mirrorNudge() {
+    /// Writes this Mac's nudge settings into the iCloud key-value store and asks for a sync.
+    func mirrorNudge() {
         let store = NSUbiquitousKeyValueStore.default
         nudge.write(to: store)
         store.synchronize()

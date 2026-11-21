@@ -27,25 +27,22 @@ final class NudgeController {
     private let timer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
     /// One run at a time, so a wake and the timer firing together cannot both deliver.
     private var isRunning = false
-    /// The switch as last seen, so only switching nudges on asks for permission.
-    private var wasEnabled: Bool
 
     private var nudge: ReadingNudge { ReadingNudge(store: store, scheduler: scheduler) }
 
     /// `focus`: the current queue and its progress, fresh at each call.
     init(focus: @escaping @MainActor () -> CurrentFocus) {
         self.focus = focus
-        _ = Preferences.shared   // mirrors this Mac's nudge settings into the store before the first read
-        store.synchronize()
-        let enabled = NudgeSettings(store: store).enabled
-        wasEnabled = enabled
+        Preferences.shared.mirrorNudge()   // this Mac's nudge settings are in the store before the first read
+        let enabled = nudge.settings.enabled
         // The launch check waits for the permission answer, so a first launch after the nudge time can still deliver.
         start { [weak self] in
-            await UserNotificationNudgeScheduler.shared.requestPermissionIfNeeded(nudgesEnabled: enabled)
+            if enabled { await UserNotificationNudgeScheduler.shared.requestPermissionIfNeeded() }
             await self?.run(.launch)
         }
         start { [weak self] in
-            for await _ in NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didWakeNotification) {
+            for await _ in NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didWakeNotification)
+                .map({ _ in }) {
                 guard let self else { return }
                 await self.run(.wake)
             }
@@ -53,7 +50,7 @@ final class NudgeController {
         // Settings > Weekly Menu (ticket 11): a changed time or switch restarts the timer at once, and switching
         // nudges on asks for permission if that was never asked.
         start { [weak self] in
-            for await _ in NotificationCenter.default.notifications(named: .deepwellNudgeSettingsChanged) {
+            for await _ in NotificationCenter.default.notifications(named: .deepwellNudgeSettingsChanged).map({ _ in }) {
                 guard let self else { return }
                 await self.settingsChanged()
             }
@@ -83,10 +80,8 @@ final class NudgeController {
     }
 
     private func settingsChanged() async {
-        let enabled = nudge.settings.enabled
-        defer { wasEnabled = enabled }
         startTimer()
-        if enabled, !wasEnabled { await scheduler.requestPermissionIfNeeded(nudgesEnabled: true) }
+        if nudge.settings.enabled { await scheduler.requestPermissionIfNeeded() }
     }
 
     private func start(_ operation: @escaping @MainActor () async -> Void) {
@@ -105,9 +100,7 @@ final class NudgeController {
 
     /// The next time of day after `date` that matches the nudge time.
     private func nextNudgeTime(after date: Date) -> Date {
-        let m = nudge.settings.minuteOfDay
-        let parts = DateComponents(hour: m / 60, minute: m % 60)
-        return Calendar.current.nextDate(after: date, matching: parts, matchingPolicy: .nextTime)
+        Calendar.current.nextDate(after: date, matching: nudge.settings.timeOfDay, matchingPolicy: .nextTime)
             ?? date.addingTimeInterval(Self.oneDay)
     }
 }
