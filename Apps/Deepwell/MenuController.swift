@@ -12,6 +12,8 @@ import DeepwellLibrary
 final class MenuController {
     private(set) var state = MenuState()
     private(set) var progress: QueueProgress?
+    /// The picked queue and its progress, as of the last `refresh()`.
+    var currentFocus: CurrentFocus { CurrentFocus(queue: state.queue, progress: progress) }
     private(set) var isBuilding = false
     private(set) var errorMessage: String?
     private let index: LibraryIndex

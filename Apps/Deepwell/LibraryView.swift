@@ -3,6 +3,7 @@ import DeepwellUI
 import DeepwellModel
 import DeepwellIndex
 import DeepwellLibrary
+import DeepwellMenu
 
 extension Notification.Name {
     /// Library > Weekly Menu: show the menu in the Current Focus column.
@@ -20,6 +21,7 @@ struct LibraryView: View {
     @State private var model: LibraryModel
     @State private var selection: String?
     @State private var menu: MenuController?
+    @State private var nudge: NudgeController?
     @State private var browsingMenu = false
     @State private var showTags = false
     @State private var columns = NavigationSplitViewVisibility.all
@@ -77,6 +79,17 @@ struct LibraryView: View {
         .ayuTheme()
         .task(id: model.index != nil) {
             if menu == nil, let i = model.index { menu = MenuController(index: i, library: model.folder) }
+            // Reading nudge (docs/menu.md, Nudges): the launch check runs once the queue and the items are known.
+            if nudge == nil, let menu {
+                nudge = NudgeController {
+                    menu.refresh()
+                    return menu.currentFocus
+                }
+            }
+            if let id = UserNotificationNudgeScheduler.pendingItemID { openNudgeItem(id) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenNudgeItem)) { n in
+            if let id = n.object as? String { openNudgeItem(id) }
         }
         .onChange(of: model.revision) { menu?.refresh() }   // the week's progress follows item status
         .onReceive(NotificationCenter.default.publisher(for: .deepwellOpenMenu)) { _ in openMenu() }
@@ -121,11 +134,24 @@ struct LibraryView: View {
         kindle.send(q, library: model)
     }
 
-    private func openMenu() {
+    /// A clicked reading nudge: the item in the reader, beside Current Focus. Current Focus alone if the item is not
+    /// (yet) on this Mac or is already done.
+    private func openNudgeItem(_ id: String) {
+        UserNotificationNudgeScheduler.pendingItemID = nil
+        showCurrentFocus(browsingMenu: false)
+        if let entry = model.entry(id: id), entry.item.status != .done { selection = entry.relativePath; pane = .reader }
+        else { selection = nil }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func openMenu() { showCurrentFocus(browsingMenu: true) }
+
+    /// The Current Focus column, freshly refreshed and out of any search; `browsingMenu` shows the menu in it.
+    private func showCurrentFocus(browsingMenu: Bool) {
         menu?.refresh()
         model.searchText = ""
         model.section = .focus
-        browsingMenu = true
+        self.browsingMenu = browsingMenu
     }
 }
 
