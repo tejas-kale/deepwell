@@ -8,6 +8,9 @@ import DeepwellModel
 public struct MenuSettings: Codable, Equatable, Sendable {
     public static let defaultModel = "claude-sonnet-5-5"
     public static let efforts = ["low", "medium", "high", "max"]
+    /// A reading nudge fires when the share of the pick's week elapsed leads the queue's time-weighted progress by
+    /// more than this (`ReadingNudge`). A constant, not a user setting.
+    public static let nudgeBehindMargin = 0.15
 
     public var model = defaultModel
     /// `output_config.effort`. Thinking counts against the 16k output budget, so higher effort risks a cut-off reply.
