@@ -1,0 +1,19 @@
+[project]
+name = "deepwell-eval"
+version = "0.1.0"
+description = "Pilot harness: does weekly menu clustering need a large model? (docs/local-model-study.md)"
+requires-python = ">=3.10"
+dependencies = ["anthropic>=0.75", "openai>=1.50"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+deepwell-eval = "deepwell_eval.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["deepwell_eval"]
