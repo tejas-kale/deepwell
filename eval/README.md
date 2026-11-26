@@ -1,6 +1,6 @@
 # Pilot harness: does weekly menu clustering need a large model?
 
-Plan and pre-registered rules: `docs/local-model-study.md`. This folder runs the pilot: 20 subsets of 60 items,
+Prefer `walkthrough.html` (open in a browser): the same steps with the reasoning beside each. Plan and pre-registered rules: `docs/local-model-study.md`. This folder runs the pilot: 20 subsets of 60 items,
 two inputs (titles and summaries, titles only), Sonnet plus four Gemma 4 sizes, Opus as a blind judge, and your
 own ratings of 15 pairs.
 
@@ -104,5 +104,6 @@ Rate `retest.json` the same way, then add `--retests "$D/runs/pilot/rater/rating
 - `deepwell_eval/validator.py`: port of `MenuValidator`.
 - `deepwell_eval/runs.py`: the run folder and `prepare`.
 - `deepwell_eval/generate.py`, `judge.py`, `rating.py`, `report.py`, `cli.py`.
+- `walkthrough.html`: the Sunday run sheet with the reasoning behind each step (open it in a browser).
 - `rater/index.html`: the blind rating page. `colab_gemma.ipynb`: the Gemma arms.
 - `tests/`: mirrors of the Swift tests, and an end-to-end run on a fake library with stub models.
