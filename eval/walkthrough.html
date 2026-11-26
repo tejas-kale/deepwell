@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunday Pilot Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: a lab protocol you follow at the desk, calm and exact
+   IDEA the run sheet pinned beside an experiment: a route of stations, then one card per step with "do, check, why"
+   PICTURE the pipeline as a route: who runs each station, how long, what it costs, where the two tracks run in parallel
+   COLOUR white ground, ink #101418, one warm yellow slab for the decision rules, slate for secondary; night #101418
+   TYPE Manrope 800 display + Manrope text, JetBrains Mono for commands only
+   LAYOUT title and the three key figures across the top, route full width beneath; steps in one column with a "why" aside */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#101418);--ink:light-dark(#101418,#eef1f4);--muted:light-dark(#55606b,#a3adb7);--rule:light-dark(#dde2e7,#2a3139);--panel:light-dark(#f4f6f8,#171d23);--yellow:light-dark(#ffd84a,#e9c23a);--onyellow:#101418;--slate:light-dark(#3d4a57,#8fa0b0);--you:light-dark(#101418,#eef1f4);--code:light-dark(#0f1a24,#0b0f13);--codeink:#e6edf3}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:64px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16.5px/1.6 Manrope,system-ui,sans-serif;overflow-x:clip}
+.band{padding-block:clamp(28px,4vw,56px);padding-inline:max(5vw,16px)}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-weight:800;font-size:clamp(32px,5vw,50px);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+h2{font-weight:800;font-size:clamp(24px,3vw,32px);line-height:1.1;letter-spacing:-.015em;margin:0 0 12px;text-wrap:balance}
+h3{font-weight:700;font-size:19px;margin:0 0 6px;line-height:1.25}
+p{margin:0 0 12px;max-width:68ch}
+.lede{font-size:18px;color:var(--muted);max-width:62ch}
+a{color:inherit;text-underline-offset:3px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(10em,1fr));gap:12px;margin:22px 0 0}
+.fig-n{border-top:2px solid var(--ink);padding-top:8px}
+.fig-n b{display:block;font-size:clamp(26px,3.4vw,36px);font-weight:800;line-height:1.1;white-space:nowrap}
+.fig-n span{color:var(--muted);font-size:14px}
+nav.toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--rule)}
+nav.toc .scroll{display:flex;gap:4px;padding:8px max(5vw,16px);max-width:1280px;margin:0 auto}
+nav.toc a{flex:none;text-decoration:none;font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;color:var(--muted)}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--panel);color:var(--ink)}
+.scroll{overflow-x:auto}
+/* route */
+.route{margin-top:28px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;position:relative}
+.track{grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:stretch}
+.lane{grid-column:1/-1;font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.st{position:relative;padding:14px 12px 12px;border-top:6px solid var(--slate);background:var(--panel);margin-right:6px;border-radius:0 0 8px 8px}
+.st.you{border-top-color:var(--you)}
+.st.wait{border-top-style:dashed}
+.st h4{margin:0 0 4px;font-size:15px;line-height:1.25}
+.st .who{font-size:13px;color:var(--muted)}
+.st .t{font-size:13px;font-weight:700;margin-top:8px;white-space:nowrap}
+.st .n{position:absolute;top:-17px;left:10px;width:26px;height:26px;border-radius:50%;background:var(--bg);border:2px solid currentColor;font:700 13px/22px Manrope,sans-serif;text-align:center}
+.span2{grid-column:span 2}
+.key{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;font-size:14px;color:var(--muted)}
+.key i{display:inline-block;width:22px;height:6px;margin-right:6px;vertical-align:middle;background:var(--slate)}
+.key i.you{background:var(--you)}
+.key i.wait{background:none;border-top:6px dashed var(--slate);height:0}
+/* decision slab */
+.slab{background:var(--yellow);color:var(--onyellow)}
+.slab .muted{color:#3a3a2a}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(16em,1fr));gap:22px;margin-top:18px}
+.rule{border-top:2px solid var(--onyellow);padding-top:10px}
+.rule b{font-size:20px;display:block;line-height:1.2;margin-bottom:4px}
+.tree{margin-top:26px;display:grid;gap:8px}
+.q{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center}
+.q>div{background:rgba(255,255,255,.55);border-radius:8px;padding:10px 14px}
+.q .arrow{font-weight:800;white-space:nowrap}
+.q .stop{background:#101418;color:#ffd84a}
+/* steps */
+.prep{display:grid;grid-template-columns:repeat(auto-fit,minmax(15em,1fr));gap:14px;margin-top:16px}
+.prep label{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border-radius:10px;padding:14px;cursor:pointer;min-height:44px}
+.prep input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:#101418}
+.step{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:clamp(18px,3vw,40px);padding:26px 0;border-top:1px solid var(--rule)}
+.step:first-of-type{border-top:0}
+.step .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:var(--muted);margin-bottom:10px}
+.step .meta b{color:var(--ink)}
+.why{border-left:3px solid var(--yellow);padding:2px 0 2px 16px;font-size:15.5px}
+.why h4{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:700}
+.why p{margin-bottom:8px}
+.check{font-size:15px;background:var(--panel);border-radius:8px;padding:10px 14px;margin-top:10px}
+.check b{display:block;font-size:13px;color:var(--muted)}
+.cmd{position:relative;margin:10px 0}
+.cmd pre{margin:0;background:var(--code);color:var(--codeink);border-radius:8px;padding:14px 92px 14px 16px;font:14px/1.5 "JetBrains Mono",ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.cmd button{position:absolute;top:8px;right:8px;min-height:36px;padding:6px 12px;border-radius:6px;border:1px solid #3a4652;background:#1d2833;color:#e6edf3;font:600 13px Manrope,sans-serif;cursor:pointer}
+.cmd button:focus-visible,nav.toc a:focus-visible,.prep label:focus-within{outline:2px solid var(--yellow);outline-offset:2px}
+code{font:14px "JetBrains Mono",ui-monospace,monospace;background:var(--panel);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+/* decisions table */
+table{border-collapse:collapse;width:100%;font-size:15px}
+th{text-align:left;font-size:13px;color:var(--muted);font-weight:700;padding:8px 10px;border-bottom:2px solid var(--ink)}
+td{padding:12px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+td:first-child{font-weight:700;width:18%}
+.not{color:var(--muted)}
+.trouble{display:grid;grid-template-columns:repeat(auto-fit,minmax(17em,1fr));gap:14px;margin-top:16px}
+.trouble div{background:var(--panel);border-radius:10px;padding:14px 16px;font-size:15px}
+.trouble b{display:block;margin-bottom:4px}
+footer{color:var(--muted);font-size:14px}
+@media(max-width:860px){.route{grid-template-columns:repeat(2,minmax(0,1fr))}.track{display:contents}.route .st{grid-column:auto!important}.route .span2{grid-column:span 2!important}.st{margin:0 6px 26px 0}.lane{margin-top:4px}.step{grid-template-columns:1fr}.q{grid-template-columns:1fr}.q .arrow{padding-left:14px}}
+@media(max-width:600px){table{font-size:14px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--rule)}.stack td{display:block;border:0;padding:3px 0;width:auto}.stack td::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);font-weight:700}}
+@media(prefers-reduced-motion:no-preference){.st{transition:transform .2s}.st:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="wrap">
+    <h1>Sunday pilot: can a small model plan my reading week?</h1>
+    <p class="lede">A run sheet for 29 November. Sonnet and four Gemma 4 models build menus from the same 20 slices of the library; Opus judges each Gemma menu against Sonnet's, blind; I rate 15 pairs to check the judge. The report then says, by rules fixed in advance, whether the full study is worth doing.</p>
+    <div class="figs">
+      <div class="fig-n"><b>about 1 h</b><span>hands-on, in four sittings</span></div>
+      <div class="fig-n"><b>about 3.5 h</b><span>start to report, mostly waiting</span></div>
+      <div class="fig-n"><b>about $30</b><span>Anthropic API, plus Colab units</span></div>
+      <div class="fig-n"><b>600</b><span>model calls: 280 menus, 320 verdicts</span></div>
+    </div>
+
+    <div class="route" aria-label="The run, station by station">
+      <div class="lane">On the Mac</div>
+      <div class="track">
+        <div class="st you"><span class="n">1</span><h4>Install and test</h4><div class="who">You, terminal</div><div class="t">2 min</div></div>
+        <div class="st you"><span class="n">2</span><h4>Copy code to Drive</h4><div class="who">You, Finder</div><div class="t">1 min</div></div>
+        <div class="st you"><span class="n">3</span><h4>Freeze the pilot</h4><div class="who">You, terminal</div><div class="t">1 min</div></div>
+        <div class="st wait"><span class="n">4</span><h4>Sonnet menus</h4><div class="who">Anthropic API</div><div class="t">15 min · $3</div></div>
+        <div class="st wait span2"><span class="n">6</span><h4>Opus judges every pair, both orders</h4><div class="who">Anthropic API, after steps 4 and 5</div><div class="t">30 min · $20–25</div></div>
+      </div>
+      <div class="lane">On Colab, in parallel with step 4</div>
+      <div class="track">
+        <div class="st wait span2" style="grid-column:3/span 2"><span class="n">5</span><h4>Four Gemma 4 sizes in vLLM</h4><div class="who">Colab Pro+, 80 GB GPU; start it, walk away</div><div class="t">2–2.5 h</div></div>
+      </div>
+      <div class="lane">Back at the desk</div>
+      <div class="track">
+        <div class="st you" style="grid-column:4"><span class="n">7</span><h4>Export 15 pairs</h4><div class="who">You, terminal</div><div class="t">1 min</div></div>
+        <div class="st you"><span class="n">8</span><h4>Rate them blind</h4><div class="who">You, rater page</div><div class="t">30 min</div></div>
+        <div class="st you"><span class="n">9</span><h4>Read the report</h4><div class="who">You</div><div class="t">15 min</div></div>
+      </div>
+    </div>
+    <div class="key"><span><i class="you"></i>you do it</span><span><i class="wait"></i>runs unattended</span></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections"><div class="scroll">
+  <a href="#rules">The rules</a><a href="#before">Before Sunday</a><a href="#steps">Steps</a><a href="#decisions">Why it's built this way</a><a href="#trouble">If something breaks</a><a href="#after">After Sunday</a>
+</div></nav>
+
+<section class="band slab" id="rules">
+  <div class="wrap">
+    <h2>The rules are fixed before any result exists</h2>
+    <p class="muted">Written into <code style="background:rgba(255,255,255,.5)">docs/local-model-study.md</code> and the report code. If a number here looks wrong, change it before step 3, never after step 6.</p>
+    <div class="rules">
+      <div class="rule"><b>"As good as Sonnet"</b>Win-or-tie rate against Sonnet with a 95% lower bound above 40%, and usable replies no more than 10 points below Sonnet's.</div>
+      <div class="rule"><b>The judge is trusted</b>My exact agreement with Opus (win, tie or loss) on the 15 pairs is at least 70%.</div>
+      <div class="rule"><b>Size matters</b>E4B and 31B differ by at least 15 points in win-or-tie rate, with titles and summaries.</div>
+    </div>
+    <div class="tree" aria-label="What the pilot decides">
+      <div class="q"><div>Agreement with Opus at least 70%?</div><span class="arrow">No →</span><div class="stop">Fix the judge rubric before anything else. The full study can't rest on it.</div></div>
+      <div class="q"><div>E4B already "as good" with summaries?</div><span class="arrow">Yes →</span><div class="stop">Write the short post: a 4B model does this job. Stop.</div></div>
+      <div class="q"><div>E4B and 31B at least 15 points apart?</div><span class="arrow">Yes →</span><div>Run the full study: 100 subsets, all arms, the Mac 4-bit check.</div></div>
+      <div class="q"><div>Gap under 15 points, nobody "as good"?</div><span class="arrow">→</span><div class="stop">Size isn't the lever. Write up the pilot and stop.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="before">
+  <div class="wrap">
+    <h2>Before Sunday: four things that take minutes now and hours if left</h2>
+    <p>Tick them off here (the ticks stay in this browser).</p>
+    <div class="prep">
+      <label><input type="checkbox" id="p-hf"><span><b>Gemma 4 licence and token.</b> On huggingface.co, accept the licence on <code>google/gemma-4-31B-it</code> and create a read token. Access can take a while to come through.</span></label>
+      <label><input type="checkbox" id="p-secret"><span><b>Token in Colab.</b> Colab › Secrets (key icon) › add <code>HF_TOKEN</code> with notebook access on.</span></label>
+      <label><input type="checkbox" id="p-key"><span><b>Anthropic key on the Mac.</b> <code>ANTHROPIC_API_KEY</code> exported, or <code>ant auth login</code> done once.</span></label>
+      <label><input type="checkbox" id="p-drive"><span><b>Google Drive for desktop</b> installed and signed in, so the Mac and Colab share one run folder.</span></label>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="steps" style="padding-top:0">
+  <div class="wrap">
+    <h2>The steps, with the reasoning beside each</h2>
+
+    <div class="step" id="s1"><div>
+      <h3>1. Install and run the tests</h3>
+      <div class="meta"><span><b>2 min</b></span><span>Mac terminal</span></div>
+      <div class="cmd"><pre>cd ~/Code/deepwell/eval && python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/pytest -q</pre><button type="button">Copy</button></div>
+      <div class="check"><b>Check</b>18 passed. These include copies of the app's own validator tests, so a failure means the Python has drifted from the Swift.</div>
+    </div><aside class="why"><h4>Why</h4>
+      <p>The harness re-implements three pieces of the app in Python (reading item files, deciding what's eligible, validating a menu) so it can run on Colab. The tests mirror <code>MenuTests.swift</code> case for case; passing them is the evidence that "usable" here means what the app would accept.</p>
+    </aside></div>
+
+    <div class="step" id="s2"><div>
+      <h3>2. Put the code in Drive and name the folder</h3>
+      <div class="meta"><span><b>1 min</b></span><span>Finder, then terminal</span></div>
+      <p>Copy <code>~/Code/deepwell/eval</code> to <code>My Drive/deepwell-eval/eval</code>. Then set <code>D</code> for this terminal (your Drive folder name differs):</p>
+      <div class="cmd"><pre>D="$HOME/Library/CloudStorage/GoogleDrive-<you>/My Drive/deepwell-eval"</pre><button type="button">Copy</button></div>
+    </div><aside class="why"><h4>Why</h4>
+      <p>Drive is the one folder both machines see. The Mac writes the frozen prompts and Sonnet's menus; Colab reads the prompts and writes Gemma's menus beside them; the Mac judges both. No copying back and forth, and a Colab disconnect loses nothing.</p>
+      <p>The cost: your item titles and summaries sit in Drive and pass through Colab. Fine now that privacy isn't the goal of this study.</p>
+    </aside></div>
+
+    <div class="step" id="s3"><div>
+      <h3>3. Freeze the pilot</h3>
+      <div class="meta"><span><b>1 min</b></span><span>Open Deepwell first so the library is synced</span></div>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval prepare --library "<your library folder>" --run "$D/runs/pilot"</pre><button type="button">Copy</button></div>
+      <div class="check"><b>Check the printout</b>About 178 eligible items; few without a summary; your recent topics; settings read from the Mac (and which ones you changed from the defaults).</div>
+    </div><aside class="why"><h4>Why 20 subsets of 60 items</h4>
+      <p>A menu is 3 to 5 bundles of about 11 items, so each slice needs about 60 items to leave the model real choices. 20 slices is enough to see a 15-point gap between model sizes; 100 would be needed to pin down "as good as Sonnet", which is the full study's job.</p>
+      <p><b>Why freeze:</b> every model gets byte-identical prompts, and the run folder refuses to be prepared twice, so nobody (me included) can re-roll the slices after seeing results.</p>
+      <p><b>Why no held-out pool:</b> the pilot trains nothing, so nothing can leak. A 30% hold-out of 178 items (about 53) couldn't fill one menu anyway.</p>
+    </aside></div>
+
+    <div class="step" id="s4"><div>
+      <h3>4. Sonnet builds the reference menus</h3>
+      <div class="meta"><span><b>15 min</b></span><span>about $3</span><span>Start step 5 while this runs</span></div>
+      <p>One request first, to see it work:</p>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval generate --run "$D/runs/pilot" --arm sonnet --backend anthropic --limit 1</pre><button type="button">Copy</button></div>
+      <p>Then the other 39:</p>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval generate --run "$D/runs/pilot" --arm sonnet --backend anthropic</pre><button type="button">Copy</button></div>
+    </div><aside class="why"><h4>Why Sonnet is the baseline</h4>
+      <p>It's what Deepwell ships today, called exactly as the app calls it: same prompt, same schema, same effort. The question is "could I swap it out?", so it's the bar to clear.</p>
+      <p><b>One attempt, no fallback.</b> The app retries once on a bad reply; the harness doesn't, so usable rates are first-try rates for every model alike. And if Sonnet declines a request, that counts as a failure rather than quietly becoming another model's answer.</p>
+    </aside></div>
+
+    <div class="step" id="s5"><div>
+      <h3>5. Gemma 4 on Colab</h3>
+      <div class="meta"><span><b>2–2.5 h unattended</b></span><span>Runtime › Change runtime type › an 80 GB GPU</span></div>
+      <p>Upload <code>eval/colab_gemma.ipynb</code> (File › Upload notebook) and run the cells top to bottom:</p>
+      <ol>
+        <li>The model check: all four ids should print <code>ok</code>.</li>
+        <li>The smoke test: one menu from E4B. <b><code>reasoning_chars</code> must be above 0</b> and <code>raw</code> should be a JSON menu.</li>
+        <li>Delete <code>outputs/smoke-e4b.jsonl</code> from the run folder.</li>
+        <li>The full loop. If Colab disconnects, run it again; finished requests are skipped.</li>
+      </ol>
+    </div><aside class="why"><h4>Why these four models</h4>
+      <p>One family, so size is the only thing that changes. E4B, 12B and 31B are a dense ladder. 26B A4B is the interesting one: 25B parameters stored, only 3.8B used per token. If it matches 31B and beats E4B, stored knowledge is what this task needs, not compute.</p>
+      <p><b>Why thinking on:</b> Sonnet thinks at medium effort; switching Gemma's off would test "thinking or not" instead of "size". The smoke test confirms the switch actually worked.</p>
+      <p><b>Why a second, unconstrained pass</b> (<code>-raw</code> arms): every arm gets the JSON shape enforced so quality is compared fairly, but a small model's raw format failure rate is a finding in its own right.</p>
+      <p><b>Why full precision here:</b> it answers the research question cleanly. Whether 4-bit on the Mac holds up is a separate check for the full study.</p>
+    </aside></div>
+
+    <div class="step" id="s6"><div>
+      <h3>6. Opus judges, blind</h3>
+      <div class="meta"><span><b>30 min</b></span><span>about $20–25</span><span>After steps 4 and 5 finish and Drive has synced</span></div>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval judge --run "$D/runs/pilot"</pre><button type="button">Copy</button></div>
+      <p>If any calls fail, run the same command again; finished verdicts are skipped.</p>
+    </div><aside class="why"><h4>Why an LLM judge, and why both orders</h4>
+      <p>Eight comparisons on 20 slices is 160 pairs: about three hours of careful rating for one person, and boredom makes the later ratings noise. Opus takes the volume; my 15 ratings in step 8 test whether it can be trusted.</p>
+      <p>Each pair is judged twice with A and B swapped. A win only counts if both verdicts agree; otherwise it's a tie. That cancels the judge's habit of preferring whichever menu comes first.</p>
+      <p>The judge always sees titles, tags and summaries, even for the titles-only arms, so it can tell whether a grouping makes sense.</p>
+    </aside></div>
+
+    <div class="step" id="s7"><div>
+      <h3>7. Export 15 blind pairs</h3>
+      <div class="meta"><span><b>1 min</b></span></div>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval pairs --run "$D/runs/pilot" --n 15</pre><button type="button">Copy</button></div>
+      <div class="check"><b>Don't open</b><code>rater/pairs.key.json</code>. It says which model made which menu.</div>
+    </div><aside class="why"><h4>Why 15, spread this way</h4>
+      <p>The pairs are drawn evenly across the four models and both inputs, so agreement with Opus isn't measured on one model alone. 15 is enough to catch a judge that's badly off; the full study raises it to 40.</p>
+    </aside></div>
+
+    <div class="step" id="s8"><div>
+      <h3>8. Rate them</h3>
+      <div class="meta"><span><b>30 min</b></span><span>Any browser</span></div>
+      <p>Open <code>eval/rater/index.html</code>, load <code>runs/pilot/rater/pairs.json</code>, and for each pair ask: <i>which menu would serve me better this week?</i> Keys <b>A</b>, <b>B</b>, <b>T</b>; arrows to move. Press Download ratings at the end and move <code>ratings-pairs.json</code> into <code>runs/pilot/rater/</code>.</p>
+      <p>Use Tie only when neither is clearly better. Bundle lengths were already enforced by the app's rules, so don't judge length.</p>
+    </div><aside class="why"><h4>Why my ratings matter more than Opus's</h4>
+      <p>"Good" here means good for me. If Opus and I disagree often, the full study's 700 verdicts would measure Opus's taste, not mine.</p>
+      <p>There's a second check: if my win-or-tie rate for Gemma is clearly higher than Opus's on the same pairs, Opus favours Sonnet's style (same family), and its verdicts understate the small models.</p>
+    </aside></div>
+
+    <div class="step" id="s9"><div>
+      <h3>9. Read the report</h3>
+      <div class="meta"><span><b>15 min</b></span></div>
+      <div class="cmd"><pre>.venv/bin/deepwell-eval report --run "$D/runs/pilot" --ratings "$D/runs/pilot/rater/ratings-pairs.json"</pre><button type="button">Copy</button></div>
+      <p>It writes <code>runs/pilot/report.md</code>. Read it in this order:</p>
+      <ol>
+        <li><b>Hard constraints:</b> <code>truncated</code> should be 0 everywhere.</li>
+        <li><b>Pilot decision:</b> the three rules above, each marked met or not met.</li>
+        <li><b>Topic quality:</b> win-or-tie with its interval, per model and input.</li>
+        <li><b>Does the input carry the knowledge?</b> The gap to Sonnet with titles only against the gap with summaries.</li>
+      </ol>
+    </div><aside class="why"><h4>How to read the knowledge table</h4>
+      <p>If a small model's gap shrinks a lot when it gets summaries, the input carries what it lacks: summaries are doing the work, and a small model is enough. If the gap stays wide even with summaries, the large model's background knowledge is what matters.</p>
+      <p>Then follow the yellow decision tree at the top. It was written before the data existed; the point is not to argue with it on Sunday evening.</p>
+    </aside></div>
+  </div>
+</section>
+
+<section class="band" id="decisions" style="background:var(--panel)">
+  <div class="wrap">
+    <h2>Why it's built this way: decisions from the grilling</h2>
+    <p>Each was argued through on 26 November. The rejected option is kept so I remember why it lost.</p>
+    <div class="scroll">
+    <table class="stack">
+      <thead><tr><th>Decision</th><th>Chosen</th><th>Not chosen, and why</th></tr></thead>
+      <tbody>
+        <tr><td data-l="Decision">Why do this at all</td><td data-l="Chosen">A research question: does grouping my reading into a week's focus need a large model's background knowledge?</td><td data-l="Not chosen" class="not">Cost, usage caps, privacy: about 50 cheap calls a year, on public article summaries, don't justify replacing Sonnet.</td></tr>
+        <tr><td data-l="Decision">What to compare</td><td data-l="Chosen">A size sweep within one family, each with titles only and with summaries.</td><td data-l="Not chosen" class="not">27B against Sonnet alone: answers "can I switch?" but can't say why, which is weak for a post.</td></tr>
+        <tr><td data-l="Decision">Model family</td><td data-l="Chosen">Gemma 4: E4B, 12B, 31B dense, and 26B A4B.</td><td data-l="Not chosen" class="not">Qwen3.8: only a 27B dense model, so no ladder. Mixing families: size and generation would change together.</td></tr>
+        <tr><td data-l="Decision">Who judges quality</td><td data-l="Chosen">Opus, blind, both orders; calibrated by my own blind ratings.</td><td data-l="Not chosen" class="not">Me alone: about 3 hours of rating per run, and noisy. Opus alone: unchecked, and may favour Sonnet.</td></tr>
+        <tr><td data-l="Decision">"Equally good"</td><td data-l="Chosen">Non-inferiority: 95% lower bound above 40% win-or-tie, fixed in advance.</td><td data-l="Not chosen" class="not">"Can't tell them apart": with 40 pairs this almost always passes. A point estimate: ±18 points of noise at 30 slices.</td></tr>
+        <tr><td data-l="Decision">How many slices</td><td data-l="Chosen">20 for the pilot, 100 for the full study.</td><td data-l="Not chosen" class="not">30 for everything: too few to separate "as good" from "not shown to be as good".</td></tr>
+        <tr><td data-l="Decision">Leakage</td><td data-l="Chosen">No hold-out now; if fine-tuning, train on a public corpus, never my items.</td><td data-l="Not chosen" class="not">A 30% hold-out: about 53 items can't fill one menu. Splitting by slice only: the same items leak.</td></tr>
+        <tr><td data-l="Decision">Fine-tuning judge</td><td data-l="Chosen">Me plus a judge from another family; Opus scores don't count.</td><td data-l="Not chosen" class="not">Opus judging a model trained on Opus's own outputs would grade its own pupil.</td></tr>
+        <tr><td data-l="Decision">My weekly picks</td><td data-l="Chosen">Logged for description only (did I finish it?).</td><td data-l="Not chosen" class="not">As preference data: about 50 a year, confounded by what was offered and my week.</td></tr>
+        <tr><td data-l="Decision">Prompt</td><td data-l="Chosen">The app's current prompt, verbatim, for every model.</td><td data-l="Not chosen" class="not">Tuning per model: a weak result could then be blamed on the prompt. A tuned E4B arm comes later, reported separately.</td></tr>
+        <tr><td data-l="Decision">Output format</td><td data-l="Chosen">JSON schema enforced for all; raw failures measured separately.</td><td data-l="Not chosen" class="not">No constraint: format failures would count as clustering failures and penalise small models for the wrong reason.</td></tr>
+        <tr><td data-l="Decision">Where it runs</td><td data-l="Chosen">Colab at full precision; the best arm re-run 4-bit on the Mac later.</td><td data-l="Not chosen" class="not">Mac only: slow for the large models. Colab only: never tests what Deepwell would ship.</td></tr>
+        <tr><td data-l="Decision">Follow-through</td><td data-l="Chosen">A two-weekend pilot with a hard stop and a write-up whatever happens.</td><td data-l="Not chosen" class="not">Going straight to the full study: weeks before the first signal, which is where projects stall.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="trouble">
+  <div class="wrap">
+    <h2>If something breaks</h2>
+    <div class="trouble">
+      <div><b>A model id prints MISSING</b>Fix the id in the notebook's <code>MODELS</code> cell from the model's Hugging Face page. Only the 31B id was checked in advance.</div>
+      <div><b><code>reasoning_chars</code> is 0</b>Thinking didn't switch on. Fix <code>EXTRA_BODY</code> for Gemma 4's chat template before the full loop, or the Gemma arms ran without thinking.</div>
+      <div><b>Colab gives a 40 GB GPU</b>The notebook runs 26B A4B and 31B at 8-bit and names them <code>-fp8</code>. Note it in the write-up; it's a different model from full precision.</div>
+      <div><b>Colab disconnects</b>Reconnect, re-run the setup cells, then the loop. Finished requests are skipped.</div>
+      <div><b><code>truncated</code> above 0 in the report</b>Replies ran out of room. Re-run that model under a new arm name with a larger <code>--max-tokens</code>.</div>
+      <div><b>Judge calls fail</b>Run <code>judge</code> again. Only missing verdicts are requested.</div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="after" style="background:var(--panel)">
+  <div class="wrap">
+    <h2>After Sunday: one more sitting in two weeks</h2>
+    <p>Re-rate 10 of the same pairs, reshuffled, to see whether my own verdicts are stable. If I disagree with myself often, my agreement with Opus means less than it looks.</p>
+    <div class="cmd"><pre>.venv/bin/deepwell-eval pairs --run "$D/runs/pilot" --n 10 --retest-from "$D/runs/pilot/rater/ratings-pairs.json"</pre><button type="button">Copy</button></div>
+    <p>Rate <code>retest.json</code> the same way, then add <code>--retests "$D/runs/pilot/rater/ratings-retest.json"</code> to the report command.</p>
+    <footer><p>Plan: <code>docs/local-model-study.md</code>. Code and plain-text runbook: <code>eval/</code>.</p></footer>
+  </div>
+</section>
+
+<script>
+{
+  for (const b of document.querySelectorAll('.cmd button')) {
+    b.addEventListener('click', async () => {
+      const text = b.previousElementSibling.textContent;
+      try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; }
+      catch { b.textContent = 'Select it'; const r = document.createRange(); r.selectNodeContents(b.previousElementSibling); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      setTimeout(() => { b.textContent = 'Copy'; }, 1600);
+    });
+  }
+  const store = (() => { try { return window.localStorage; } catch { return null; } })();
+  for (const c of document.querySelectorAll('.prep input')) {
+    try { c.checked = store?.getItem('walk:' + c.id) === '1'; } catch {}
+    c.addEventListener('change', () => { try { store?.setItem('walk:' + c.id, c.checked ? '1' : '0'); } catch {} });
+  }
+}
+</script>
+</body>
+</html>

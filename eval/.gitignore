@@ -1,0 +1,5 @@
+# Run folders hold titles and summaries from the private library: never commit them.
+runs/
+*.egg-info/
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deepwell menu rater</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #6e6e73; --bg: #fbfbfd; --card: #fff; --line: #d2d2d7; --pick: #0a66d8; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #f5f5f7; --muted: #a1a1a6; --bg: #111; --card: #1c1c1e; --line: #3a3a3c; --pick: #4c9bff; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: var(--fg); background: var(--bg); }
+  header { position: sticky; top: 0; z-index: 1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+           padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header .grow { flex: 1; }
+  main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+  .menus { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .menus { grid-template-columns: 1fr; } }
+  .menu { background: var(--card); border: 2px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .menu.chosen { border-color: var(--pick); }
+  .menu h2 { margin: 0 0 8px; font-size: 18px; }
+  .bundle { margin: 12px 0; }
+  .bundle h3 { margin: 0 0 4px; font-size: 15px; }
+  .bundle h3 span, .muted { color: var(--muted); font-weight: normal; }
+  ol { margin: 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  li .reason { color: var(--muted); }
+  details { margin: 0 0 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
+  details li { font-size: 13px; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+  button.on { background: var(--pick); border-color: var(--pick); color: #fff; }
+  kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  #empty { max-width: 640px; margin: 60px auto; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Menu rater</strong>
+  <input type="file" id="file" accept=".json" aria-label="Load a pairs file">
+  <span id="progress" class="muted"></span>
+  <span class="grow"></span>
+  <button id="prev" title="Previous (←)">←</button>
+  <button id="pa" title="A is better (A)">A better</button>
+  <button id="pt" title="Neither is clearly better (T)">Tie</button>
+  <button id="pb" title="B is better (B)">B better</button>
+  <button id="next" title="Next (→)">→</button>
+  <button id="save">Download ratings</button>
+</header>
+<main>
+  <div id="empty">
+    <h1>Load a pairs file</h1>
+    <p>Choose <code>runs/&lt;run&gt;/rater/pairs.json</code> (or <code>retest.json</code>). Don't open the
+      <code>.key.json</code> next to it: it says which model made which menu.</p>
+    <p>For each pair, ask: <em>which menu would serve me better this week?</em> Judge whether each bundle hangs
+      together, whether the bundles are distinct and cover what the library is strongest on, the order from
+      introductory to deeper, and whether the reasons are right. The app already enforced bundle lengths.
+      Choose Tie only when neither is clearly better.</p>
+    <p>Keys: <kbd>A</kbd> <kbd>B</kbd> <kbd>T</kbd> to rate (moves on), <kbd>←</kbd> <kbd>→</kbd> to move.
+      Ratings are kept in this browser as you go; press <strong>Download ratings</strong> at the end and save the
+      file in the same <code>rater</code> folder.</p>
+  </div>
+  <div id="pair" hidden>
+    <details id="items"><summary></summary><ul></ul></details>
+    <div class="menus">
+      <section class="menu" id="mA"></section>
+      <section class="menu" id="mB"></section>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+let data = null, idx = 0, ratings = {};
+const $ = id => document.getElementById(id);
+const storeKey = () => "deepwell-rater:" + data.name;
+const fmt = m => [m >= 60 ? Math.floor(m / 60) + " h" : "", m % 60 ? (m % 60) + " min" : ""].filter(Boolean).join(" ");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function renderMenu(el, label, bundles) {
+  el.innerHTML = `<h2>Menu ${label}</h2>` + bundles.map((b, n) =>
+    `<div class="bundle"><h3>${n + 1}. ${esc(b.topic)} <span>(${fmt(b.minutes)})</span></h3><ol>` +
+    b.entries.map(e => `<li>${esc(e.title)} <span class="muted">(${e.minutes} min)</span>` +
+      (e.reason ? `<br><span class="reason">${esc(e.reason)}</span>` : "") + `</li>`).join("") +
+    `</ol></div>`).join("");
+}
+
+function render() {
+  if (!data) return;
+  const p = data.pairs[idx];
+  $("empty").hidden = true; $("pair").hidden = false;
+  const recent = p.recent_topics.length ? p.recent_topics.join(", ") : "none";
+  $("items").querySelector("summary").textContent =
+    `${p.items.length} items were available (recently picked topics: ${recent}). Show them`;
+  $("items").querySelector("ul").innerHTML = p.items.map(i =>
+    `<li>${esc(i.title)} <span class="muted">(${i.type}, ${i.minutes} min)</span> ${esc(i.summary || "")}</li>`).join("");
+  renderMenu($("mA"), "A", p.A); renderMenu($("mB"), "B", p.B);
+  const r = ratings[p.id];
+  $("mA").classList.toggle("chosen", r === "A"); $("mB").classList.toggle("chosen", r === "B");
+  $("pa").classList.toggle("on", r === "A"); $("pb").classList.toggle("on", r === "B"); $("pt").classList.toggle("on", r === "tie");
+  const done = Object.keys(ratings).length;
+  $("progress").textContent = `Pair ${idx + 1} of ${data.pairs.length} · ${done} rated`;
+}
+
+function rate(v) {
+  if (!data) return;
+  ratings[data.pairs[idx].id] = v;
+  localStorage.setItem(storeKey(), JSON.stringify(ratings));
+  if (idx < data.pairs.length - 1) { idx++; window.scrollTo(0, 0); }
+  render();
+}
+function move(d) { if (!data) return; idx = Math.max(0, Math.min(data.pairs.length - 1, idx + d)); window.scrollTo(0, 0); render(); }
+
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  data = JSON.parse(await f.text());
+  ratings = JSON.parse(localStorage.getItem(storeKey()) || "{}");
+  idx = Math.max(0, data.pairs.findIndex(p => !(p.id in ratings)));
+  render();
+});
+$("pa").onclick = () => rate("A"); $("pb").onclick = () => rate("B"); $("pt").onclick = () => rate("tie");
+$("prev").onclick = () => move(-1); $("next").onclick = () => move(1);
+$("save").onclick = () => {
+  if (!data) return;
+  const left = data.pairs.length - Object.keys(ratings).length;
+  if (left && !confirm(`${left} pairs are not rated yet. Download anyway?`)) return;
+  const blob = new Blob([JSON.stringify({ name: data.name, rated_at: new Date().toISOString(), ratings }, null, 1)],
+                        { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ratings-${data.name}.json` });
+  a.click(); URL.revokeObjectURL(a.href);
+};
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (k === "a") rate("A"); else if (k === "b") rate("B"); else if (k === "t") rate("tie");
+  else if (e.key === "ArrowLeft") move(-1); else if (e.key === "ArrowRight") move(1);
+});
+</script>
+</body>
+</html>
