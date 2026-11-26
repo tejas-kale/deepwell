@@ -6,6 +6,8 @@ import DeepwellModel
 /// - every field not listed below, and the body, come from `current`;
 /// - status: the most advanced wins (done > reading > unread);
 /// - progress: the highest wins;
+/// - finished_at: when the merged status is done, the earliest date on any version
+///   (a missing date stays missing; nothing is invented). Otherwise none;
 /// - tags: each version's tags (and `new_tags` flags) are first replayed through the tag-ops log (`TagOps`, ticket 19),
 ///   so a stale copy can't bring back a renamed, merged or deleted tag; then the union, `current`'s order first,
 ///   compared with `TagName.canonical`;
@@ -22,6 +24,7 @@ public enum ConflictMerge {
             out.progress = max(out.progress, o.progress)
         }
         if out.status == .done { out.progress = max(out.progress, 1) }
+        out.finishedAt = earliestFinish(current: current, others: others, status: out.status)
 
         var seen = Set(out.tags.map(fold))
         for o in others {
@@ -37,6 +40,13 @@ public enum ConflictMerge {
 
     static func rank(_ s: ItemStatus) -> Int {
         switch s { case .unread: 0; case .reading: 1; case .done: 2 }
+    }
+
+    /// Every recorded date counts. A missing date is not filled in from anywhere else, and a result that
+    /// is not done keeps none.
+    private static func earliestFinish(current: Item, others: [Item], status: ItemStatus) -> Date? {
+        guard status == .done else { return nil }
+        return ([current] + others).compactMap(\.finishedAt).min()
     }
 
     private static func fold(_ tag: String) -> String { TagName.canonical(tag) }

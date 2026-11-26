@@ -116,6 +116,8 @@ marks the versions resolved and removes them. The rules:
 - the **body**, and every field not listed here, come from the current file;
 - **status**: the most advanced wins (done > reading > unread), and done means progress 1;
 - **progress**: the highest wins;
+- **finished_at**: when the merged status is done, the earliest `finished_at` on any version. A missing
+  date is not filled in. When the merged status is not done, `finished_at` is cleared;
 - **tags**: each version's tags (and `new_tags` flags) are first replayed through `tag-ops.jsonl`
   (`ConflictMerge.merge(current:others:ops:)`; both apps load the log once per batch of conflicts), so a stale copy
   can't bring back a renamed, merged or deleted tag. Then the union, in the current file's order first, compared with

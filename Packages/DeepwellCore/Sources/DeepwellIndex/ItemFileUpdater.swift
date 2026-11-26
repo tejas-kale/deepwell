@@ -17,15 +17,32 @@ public enum ReadingState {
     }
 
     /// Applies a scroll `progress` (0...1) to `item`. Progress only moves forward automatically; an item
-    /// already `done` stays done. Starting to scroll turns `unread` into `reading`.
-    public static func apply(progress: Double, to item: Item) -> Item {
+    /// already `done` stays done (and keeps `finishedAt`, including none: there is no backfill). Starting
+    /// to scroll turns `unread` into `reading`. Crossing `doneThreshold` records `finishedAt` as `now`.
+    public static func apply(progress: Double, to item: Item, now: Date = Date()) -> Item {
         var i = item
         let p = min(max(progress, 0), 1)
         guard i.status != .done else { return i }
         i.progress = max(i.progress, p)
-        if i.progress >= doneThreshold { i.status = .done; i.progress = 1 }
-        else if i.progress > 0 { i.status = .reading }
+        if i.progress >= doneThreshold {
+            updateFinishedAt(&i, becoming: .done, now: now)
+            i.status = .done
+            i.progress = 1
+        } else if i.progress > 0 {
+            updateFinishedAt(&i, becoming: .reading, now: now)
+            i.status = .reading
+        }
         return i
+    }
+
+    /// Writes `finishedAt` only when status becomes `done`. An item that is already done keeps its date,
+    /// or the absence of one. Any other status clears it. Call before assigning `status`.
+    static func updateFinishedAt(_ item: inout Item, becoming status: ItemStatus, now: Date) {
+        if status == .done {
+            if item.status != .done { item.finishedAt = now }
+        } else {
+            item.finishedAt = nil
+        }
     }
 }
 
@@ -48,13 +65,14 @@ public enum ItemFileUpdater {
     }
 
     @discardableResult
-    public static func setProgress(_ progress: Double, at url: URL) throws -> ItemDocument {
-        try update(url) { $0 = ReadingState.apply(progress: progress, to: $0) }
+    public static func setProgress(_ progress: Double, at url: URL, now: Date = Date()) throws -> ItemDocument {
+        try update(url) { $0 = ReadingState.apply(progress: progress, to: $0, now: now) }
     }
 
     @discardableResult
-    public static func setStatus(_ status: ItemStatus, at url: URL) throws -> ItemDocument {
+    public static func setStatus(_ status: ItemStatus, at url: URL, now: Date = Date()) throws -> ItemDocument {
         try update(url) {
+            ReadingState.updateFinishedAt(&$0, becoming: status, now: now)
             $0.status = status
             if status == .done { $0.progress = 1 }
             if status == .unread { $0.progress = 0 }

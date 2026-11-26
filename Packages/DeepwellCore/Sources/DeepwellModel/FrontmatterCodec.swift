@@ -27,6 +27,7 @@ public enum FrontmatterCodec {
         lines.append("tags: [\(i.tags.map(quote).joined(separator: ", "))]")
         lines.append("status: \(i.status.rawValue)")
         lines.append("progress: \(formatProgress(i.progress))")
+        if let finished = i.finishedAt { lines.append("finished_at: \(isoString(finished))") }
         if let issue = i.issueID { lines.append("issue_id: \(quote(issue))") }
         lines.append(contentsOf: i.extraFrontmatter)
         lines.append("---")
@@ -79,6 +80,15 @@ public enum FrontmatterCodec {
         guard let captured = parseDate(capturedRaw) else { throw FrontmatterError.invalidValue(field: "captured_at", value: capturedRaw) }
         let progressRaw = try string("progress") ?? "0"
         guard let progress = Double(progressRaw) else { throw FrontmatterError.invalidValue(field: "progress", value: progressRaw) }
+        let finishedAt: Date?
+        if let finishedRaw = try string("finished_at") {
+            guard let parsed = parseDate(finishedRaw) else {
+                throw FrontmatterError.invalidValue(field: "finished_at", value: finishedRaw)
+            }
+            finishedAt = parsed
+        } else {
+            finishedAt = nil
+        }
 
         var tags: [String] = []
         if let e = entry("tags") {
@@ -94,7 +104,7 @@ public enum FrontmatterCodec {
         }
 
         let known: Set<String> = ["id", "type", "title", "source_url", "author", "captured_at", "word_count",
-                                  "duration_minutes", "tags", "status", "progress", "issue_id"]
+                                  "duration_minutes", "tags", "status", "progress", "finished_at", "issue_id"]
         var extras: [String] = []
         for line in fmLines {
             let isCont = line.hasPrefix(" ") || line.hasPrefix("\t") || line.hasPrefix("- ")
@@ -115,7 +125,8 @@ public enum FrontmatterCodec {
             id: try required("id"), type: type, title: try string("title") ?? "",
             sourceURL: source, author: author, capturedAt: captured,
             wordCount: try int("word_count"), durationMinutes: try int("duration_minutes"),
-            tags: tags, status: status, progress: progress, issueID: issue, extraFrontmatter: extras)
+            tags: tags, status: status, progress: progress, finishedAt: finishedAt, issueID: issue,
+            extraFrontmatter: extras)
         return ItemDocument(item: item, body: body)
     }
 

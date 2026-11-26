@@ -297,6 +297,76 @@ final class IndexTests: XCTestCase {
         XCTAssertEqual(ReadingState.apply(progress: 0.1, to: done), done)
     }
 
+    /// 2026-01-01T00:00:00Z. A literal, so the assertion is not derived from the formatter under test.
+    private let finished = Date(timeIntervalSince1970: 1_767_225_600)
+    /// 2026-06-01T00:00:00Z.
+    private let finishedLater = Date(timeIntervalSince1970: 1_780_272_000)
+
+    func testReachingTheEndRecordsFinishedAt() {
+        let reading = Item(type: .article, title: "t", status: .reading, progress: 0.4)
+        let done = ReadingState.apply(progress: 0.99, to: reading, now: finished)
+        XCTAssertEqual(done.status, .done)
+        XCTAssertEqual(done.progress, 1)
+        XCTAssertEqual(done.finishedAt, finished)
+    }
+
+    func testScrollingToTheEndWritesFinishedAtInTheSameUpdate() throws {
+        let url = try add("Essay", status: .reading)
+        let doc = try ItemFileUpdater.setProgress(0.99, at: url, now: finished)
+        XCTAssertEqual(doc.item.status, .done)
+        XCTAssertEqual(doc.item.finishedAt, finished)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(text.contains("status: done"))
+        XCTAssertTrue(text.contains("finished_at: 2026-01-01T00:00:00Z"))
+    }
+
+    func testSettingStatusDoneWritesFinishedAtInTheSameUpdate() throws {
+        let url = try add("Essay", status: .reading)
+        let doc = try ItemFileUpdater.setStatus(.done, at: url, now: finished)
+        XCTAssertEqual(doc.item.status, .done)
+        XCTAssertEqual(doc.item.progress, 1)
+        XCTAssertEqual(doc.item.finishedAt, finished)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(text.contains("status: done"))
+        XCTAssertTrue(text.contains("finished_at: 2026-01-01T00:00:00Z"))
+    }
+
+    func testResettingStatusClearsFinishedAt() throws {
+        let url = try add("Essay", status: .unread)
+        _ = try ItemFileUpdater.setStatus(.done, at: url, now: finished)
+        let reading = try ItemFileUpdater.setStatus(.reading, at: url, now: finishedLater)
+        XCTAssertEqual(reading.item.status, .reading)
+        XCTAssertNil(reading.item.finishedAt)
+        XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).contains("finished_at"))
+
+        _ = try ItemFileUpdater.setStatus(.done, at: url, now: finished)
+        let unread = try ItemFileUpdater.setStatus(.unread, at: url, now: finishedLater)
+        XCTAssertEqual(unread.item.status, .unread)
+        XCTAssertEqual(unread.item.progress, 0)
+        XCTAssertNil(unread.item.finishedAt)
+        XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).contains("finished_at"))
+    }
+
+    func testAlreadyDoneItemIsNotGivenAFinishedAt() throws {
+        var done = Item(type: .article, title: "t", status: .done, progress: 1)
+        XCTAssertEqual(ReadingState.apply(progress: 0.5, to: done, now: finished), done)
+        XCTAssertNil(done.finishedAt)
+
+        let url = try add("Essay", status: .done)
+        let again = try ItemFileUpdater.setStatus(.done, at: url, now: finished)
+        XCTAssertEqual(again.item.status, .done)
+        XCTAssertNil(again.item.finishedAt)
+        XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).contains("finished_at"))
+    }
+
+    func testMarkingDoneAgainKeepsTheOriginalFinishedAt() throws {
+        let url = try add("Essay", status: .reading)
+        _ = try ItemFileUpdater.setStatus(.done, at: url, now: finished)
+        let again = try ItemFileUpdater.setStatus(.done, at: url, now: finishedLater)
+        XCTAssertEqual(again.item.finishedAt, finished)
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("finished_at: 2026-01-01T00:00:00Z"))
+    }
+
     func testWatcherTreatsOnlyDeepwellFolderFilesAsSharedState() {
         let lib = URL(fileURLWithPath: "/lib", isDirectory: true)
         XCTAssertTrue(LibraryWatcher.isSharedState(lib.appendingPathComponent(".deepwell/menu.json")))

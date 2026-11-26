@@ -229,11 +229,15 @@ final class CoordinatedFileTests: XCTestCase {
 
 final class ConflictMergeTests: XCTestCase {
     private func item(_ status: ItemStatus = .unread, progress: Double = 0, tags: [String] = [], extra: [String] = [],
-                      title: String = "Current") -> Item {
+                      title: String = "Current", finishedAt: Date? = nil) -> Item {
         Item(id: "a", type: .article, title: title, sourceURL: nil, author: nil, capturedAt: Date(timeIntervalSince1970: 0),
-             wordCount: 100, durationMinutes: nil, tags: tags, status: status, progress: progress, issueID: nil,
-             extraFrontmatter: extra)
+             wordCount: 100, durationMinutes: nil, tags: tags, status: status, progress: progress, finishedAt: finishedAt,
+             issueID: nil, extraFrontmatter: extra)
     }
+
+    /// 2026-01-01T00:00:00Z and 2026-06-01T00:00:00Z.
+    private let earlierFinish = Date(timeIntervalSince1970: 1_767_225_600)
+    private let laterFinish = Date(timeIntervalSince1970: 1_780_272_000)
 
     func testMostAdvancedStatusWins() {
         XCTAssertEqual(ConflictMerge.merge(current: item(.unread), others: [item(.reading)]).status, .reading)
@@ -262,6 +266,50 @@ final class ConflictMergeTests: XCTestCase {
         // Multi-line values travel with their key.
         let n = ConflictMerge.merge(current: item(), others: [item(extra: ["chapters:", "  - one", "  - two"])])
         XCTAssertEqual(n.extraFrontmatter, ["chapters:", "  - one", "  - two"])
+    }
+
+    func testConflictKeepsTheEarliestFinishedAt() {
+        let currentLater = ConflictMerge.merge(
+            current: item(.done, progress: 1, finishedAt: laterFinish),
+            others: [item(.done, progress: 1, finishedAt: earlierFinish)])
+        XCTAssertEqual(currentLater.finishedAt, earlierFinish)
+
+        let currentEarlier = ConflictMerge.merge(
+            current: item(.done, progress: 1, finishedAt: earlierFinish),
+            others: [item(.done, progress: 1, finishedAt: laterFinish)])
+        XCTAssertEqual(currentEarlier.finishedAt, earlierFinish)
+
+        let onlyOneDated = ConflictMerge.merge(
+            current: item(.done, progress: 1),
+            others: [item(.done, progress: 1, finishedAt: laterFinish)])
+        XCTAssertEqual(onlyOneDated.finishedAt, laterFinish)
+
+        let finishedOnTheOtherDevice = ConflictMerge.merge(
+            current: item(.reading, progress: 0.4),
+            others: [item(.done, progress: 1, finishedAt: earlierFinish)])
+        XCTAssertEqual(finishedOnTheOtherDevice.status, .done)
+        XCTAssertEqual(finishedOnTheOtherDevice.finishedAt, earlierFinish)
+
+        // A date on a copy that is no longer done still counts: it is the earliest recorded finish.
+        let datedWhileReading = ConflictMerge.merge(
+            current: item(.reading, progress: 0.2, finishedAt: earlierFinish),
+            others: [item(.done, progress: 1)])
+        XCTAssertEqual(datedWhileReading.status, .done)
+        XCTAssertEqual(datedWhileReading.finishedAt, earlierFinish)
+    }
+
+    func testConflictDoesNotBackfillAFinishedAt() {
+        let undated = ConflictMerge.merge(current: item(.done, progress: 1), others: [item(.done, progress: 1)])
+        XCTAssertEqual(undated.status, .done)
+        XCTAssertNil(undated.finishedAt)
+    }
+
+    func testConflictClearsFinishedAtWhenNothingIsDone() {
+        let merged = ConflictMerge.merge(
+            current: item(.reading, progress: 0.4, finishedAt: earlierFinish),
+            others: [item(.unread)])
+        XCTAssertEqual(merged.status, .reading)
+        XCTAssertNil(merged.finishedAt)
     }
 
     func testEverythingElseComesFromCurrent() {

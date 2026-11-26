@@ -63,6 +63,19 @@ final class FrontmatterCodecTests: XCTestCase {
         XCTAssertEqual(again.item.tags, ["one", "two"])
     }
 
+    func testFinishedAtRoundTripsAsIso8601AndIsOmittedWhenAbsent() throws {
+        var item = Item(id: "i", type: .article, title: "T", capturedAt: date, status: .done, progress: 1,
+                        finishedAt: Date(timeIntervalSince1970: 1_767_225_600))
+        let text = FrontmatterCodec.encode(ItemDocument(item: item, body: "x"))
+        XCTAssertTrue(text.contains("finished_at: 2026-01-01T00:00:00Z"))
+        XCTAssertEqual(try FrontmatterCodec.decode(text).item, item)
+
+        item.finishedAt = nil
+        let bare = FrontmatterCodec.encode(ItemDocument(item: item, body: "x"))
+        XCTAssertFalse(bare.contains("finished_at"))
+        XCTAssertNil(try FrontmatterCodec.decode(bare).item.finishedAt)
+    }
+
     func testErrors() {
         XCTAssertThrowsError(try FrontmatterCodec.decode("no frontmatter")) {
             XCTAssertEqual($0 as? FrontmatterError, .missingFrontmatter)

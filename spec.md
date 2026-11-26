@@ -118,7 +118,7 @@ Heavy jobs stay on the Mac.
   phone reads it. The SQLite index stays per device and is rebuilt from the Markdown files.
 - **Conflicts:** every write to an item file is file-coordinated. When iCloud reports conflict versions, they are merged
   automatically: the body is kept, the most advanced status wins (done > reading > unread), the highest progress wins,
-  and tags are combined. The losing versions are deleted. Combining tags is only safe because tag renames, merges and
+  the earliest `finished_at` is kept when the result is done, and tags are combined. The losing versions are deleted. Combining tags is only safe because tag renames, merges and
   deletes are appended to `tag-ops.jsonl` and re-applied to any file's tags. That way a stale copy can't bring a removed tag back.
 - **Keys:** Anthropic and OpenRouter keys are synchronizable Keychain items in a shared access group, entered once.
 - **Phone does:** reading, status/progress, Current Focus, the library with filters and search, tag curation,

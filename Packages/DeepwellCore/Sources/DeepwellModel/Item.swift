@@ -26,6 +26,8 @@ public struct Item: Equatable, Sendable {
     public var tags: [String]
     public var status: ItemStatus
     public var progress: Double
+    /// When `status` became `done`, or nil when it is not done or was already done before this was recorded.
+    public var finishedAt: Date?
     public var issueID: String?
     /// Frontmatter keys this version doesn't know, kept verbatim (raw YAML lines) so that
     /// rewriting a file never drops data written by a newer version or by the user.
@@ -43,6 +45,7 @@ public struct Item: Equatable, Sendable {
         tags: [String] = [],
         status: ItemStatus = .unread,
         progress: Double = 0,
+        finishedAt: Date? = nil,
         issueID: String? = nil,
         extraFrontmatter: [String] = []
     ) {
@@ -57,6 +60,7 @@ public struct Item: Equatable, Sendable {
         self.tags = tags
         self.status = status
         self.progress = progress
+        self.finishedAt = finishedAt
         self.issueID = issueID
         self.extraFrontmatter = extraFrontmatter
     }
